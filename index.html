@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Archaeolab - Archaeology Project Management</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+    <div class="page-shell">
+        <div class="project-banner" id="projectBanner">
+            <img id="projectBannerImg" class="project-banner-img" alt="Project image" hidden>
+            <div id="projectBannerEmpty" class="project-banner-empty">
+                <p>Add a project map image for on-site reference.</p>
+            </div>
+            <div class="project-banner-overlay">
+                <div class="project-banner-actions">
+                    <label class="project-banner-upload-btn">
+                        Upload Map Image
+                        <input type="file" id="projectImageInput" accept=".jpg,.jpeg,.png,.webp">
+                    </label>
+                    <button type="button" id="removeProjectImageButton" class="ghost-button" hidden>Remove</button>
+                </div>
+                <p class="project-banner-help">Accepted files: JPG, PNG, WEBP up to 3 MB.</p>
+                <p class="project-banner-help">Click the map image to open it in a new page reference view.</p>
+                <p id="projectImageMessage" class="project-banner-message" aria-live="polite"></p>
+            </div>
+        </div>
+
+        <header class="hero">
+            <div>
+                <p class="eyebrow">Archaeolab App Prototype</p>
+                <h1>Archaeolab - Archaeology Project Management</h1>
+                <p class="intro">
+                    Record site information once, then enter as many shovel test pits and strata as you need.
+                    STP labels remain editable, even when a next label suggestion is offered.
+                </p>
+            </div>
+
+            <div class="hero-card">
+                <p class="hero-card-label">Current Session</p>
+                <p id="sessionStatus" class="session-status">0 STPs saved</p>
+                <div class="hero-card-buttons">
+                    <button type="button" id="saveProjectButton" class="secondary-button">Save Project &amp; Start New</button>
+                    <button type="button" id="clearSessionButton" class="ghost-button">Clear Session</button>
+                </div>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <section class="panel">
+                <div class="section-head">
+                    <div>
+                        <h2>Project Library</h2>
+                        <p>Save the current session as a named project, then start fresh. Load any project to resume work.</p>
+                    </div>
+                </div>
+                <div id="projectsEmptyState" class="empty-state">No saved projects yet.</div>
+                <div id="projectsList" class="projects-list"></div>
+            </section>
+
+            <form id="entryForm">
+                <section class="panel">
+                    <div class="section-head">
+                        <div>
+                            <h2>Site Details</h2>
+                            <p>Start with the site name, site location, and the first STP label.</p>
+                        </div>
+                    </div>
+
+                    <div class="field-grid">
+                        <label class="field">
+                            <span>Site Name</span>
+                            <input type="text" id="siteName" name="siteName" placeholder="Shot Town Road" required>
+                        </label>
+
+                        <label class="field">
+                            <span>Site Location</span>
+                            <input type="text" id="siteLocation" name="siteLocation" placeholder="County, parcel, or project area" required>
+                        </label>
+
+                        <label class="field">
+                            <span>Depth Measurement</span>
+                            <select id="depthUnit" name="depthUnit">
+                                <option value="metric">Metric</option>
+                                <option value="standard">Standard</option>
+                                <option value="engineering-feet">Engineering Feet</option>
+                            </select>
+                        </label>
+
+                        <label class="field">
+                            <span>STP Entry Type</span>
+                            <select id="stpEntryType" name="stpEntryType">
+                                <option value="base">Base STP</option>
+                                <option value="supplemental">Supplemental STP</option>
+                            </select>
+                        </label>
+
+                        <label class="field">
+                            <span>Parent Base STP</span>
+                            <select id="parentStp" name="parentStp" disabled>
+                                <option value="">Select base STP</option>
+                            </select>
+                        </label>
+
+                        <label class="field">
+                            <span>GPS Latitude</span>
+                            <input type="number" id="gpsLatitude" name="gpsLatitude" step="any" min="-90" max="90" placeholder="38.98765">
+                        </label>
+
+                        <label class="field">
+                            <span>GPS Longitude</span>
+                            <input type="number" id="gpsLongitude" name="gpsLongitude" step="any" min="-180" max="180" placeholder="-76.94567">
+                        </label>
+
+                        <div class="field stp-label-field">
+                            <label for="stpLabel">Current STP Label</label>
+                            <div class="inline-field">
+                                <input type="text" id="stpLabel" name="stpLabel" placeholder="A1" required>
+                                <button type="button" id="suggestLabelButton" class="secondary-button">Suggest Next</button>
+                            </div>
+
+                            <label class="field">
+                                <span>Supplemental Direction (Sup)</span>
+                                <select id="supDirection" name="supDirection">
+                                    <option value="">None (Base STP)</option>
+                                    <option value="N">North (N)</option>
+                                    <option value="S">South (S)</option>
+                                    <option value="E">East (E)</option>
+                                    <option value="W">West (W)</option>
+                                </select>
+                            </label>
+
+                            <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W.</p>
+                        </div>
+                    </div>
+
+                    <p class="mapping-note">
+                        Excel-ready export starts with the STPs sheet column order:
+                        <strong>Sup, Transect, Unit, STP, Stratum, Depth, Munsell 1, Munsell 2, Munsell 3, Munsell, Texture, Horizon, Notes/Inclusions</strong>.
+                    </p>
+                </section>
+
+                <section class="panel">
+                    <div class="section-head">
+                        <div>
+                            <h2>Strata</h2>
+                            <p>Add one card for each stratum within the current STP.</p>
+                        </div>
+
+                        <button type="button" id="addStratumButton" class="secondary-button">Add Stratum</button>
+                    </div>
+
+                    <div id="strataList" class="strata-list"></div>
+                </section>
+
+                <div class="form-actions">
+                    <button type="button" id="resetCurrentButton" class="ghost-button">Reset Current STP</button>
+                    <button type="button" id="saveStpButton" class="primary-button">Save STP</button>
+                </div>
+            </form>
+
+            <section class="panel saved-panel">
+                <div class="section-head">
+                    <div>
+                        <h2>Saved STPs</h2>
+                        <p>Review what has been entered so far and export the current session when needed.</p>
+                    </div>
+
+                    <div class="section-actions">
+                        <button type="button" id="exportXlsxButton" class="secondary-button">Download Excel-ready XLSX</button>
+                        <button type="button" id="exportCsvButton" class="ghost-button">Download CSV Backup</button>
+                        <button type="button" id="exportJsonButton" class="ghost-button">Download JSON Backup</button>
+                    </div>
+                </div>
+
+                <div id="savedEmptyState" class="empty-state">No STPs saved yet.</div>
+                <div id="savedStpList" class="saved-stp-list"></div>
+            </section>
+        </main>
+    </div>
+
+    <template id="stratumTemplate">
+        <article class="stratum-card">
+            <div class="stratum-card-head">
+                <div>
+                    <p class="stratum-kicker">Current STP</p>
+                    <h3 class="stratum-title">Stratum <span data-row-number></span></h3>
+                </div>
+                <button type="button" class="link-button" data-remove-stratum>Remove</button>
+            </div>
+
+            <div class="stratum-grid">
+                <label class="field">
+                    <span>Stratum Label</span>
+                    <input type="number" min="1" step="1" data-field="stratumLabel" required>
+                </label>
+
+                <label class="field">
+                    <span>Depth</span>
+                    <input type="text" data-field="depth" placeholder="0-20 cm" required>
+                </label>
+
+                <label class="field">
+                    <span>Munsell</span>
+                    <input type="text" data-field="munsell" list="munsellOptions" placeholder="10YR3/3" required>
+                </label>
+
+                <label class="field">
+                    <span>Soil Type</span>
+                    <input type="text" data-field="soilType" list="textureOptions" placeholder="Silty clay loam" required>
+                </label>
+
+                <label class="field">
+                    <span>Horizon</span>
+                    <input type="text" data-field="horizon" list="horizonOptions" placeholder="Ap, Bt, C" required>
+                </label>
+
+                <label class="field">
+                    <span>Artifact Catalog</span>
+                    <input type="text" data-field="artifactCatalog" placeholder="Bag/Catalog IDs for this stratum">
+                </label>
+
+                <label class="field">
+                    <span>Artifact Summary</span>
+                    <input type="text" data-field="artifactSummary" placeholder="Ceramic, glass, metal, lithics, etc.">
+                </label>
+
+                <label class="field">
+                    <span>Photos</span>
+                    <input type="file" data-field="photos" accept="image/*" multiple>
+                </label>
+
+                <label class="field">
+                    <span>Photo Naming Rule</span>
+                    <input type="text" data-field="photoRule" readonly>
+                </label>
+
+                <div class="field field-notes">
+                    <span>Selected Photo Names</span>
+                    <ul class="photo-list" data-photo-list></ul>
+                    <p class="photo-warning" data-photo-warning></p>
+                </div>
+
+                <label class="field field-notes">
+                    <span>Notes</span>
+                    <textarea data-field="notes" rows="3" placeholder="Artifacts, roots, mottling, disturbance, moisture, or other observations"></textarea>
+                </label>
+            </div>
+        </article>
+    </template>
+
+    <datalist id="munsellOptions"></datalist>
+    <datalist id="textureOptions"></datalist>
+    <datalist id="horizonOptions"></datalist>
+
+    <div id="mapViewerModal" class="map-viewer" hidden aria-hidden="true">
+        <div class="map-viewer-dialog" role="dialog" aria-modal="true" aria-label="Project map reference">
+            <div class="map-viewer-head">
+                <p class="map-viewer-title">Project Map Reference</p>
+                <button type="button" id="closeMapViewerButton" class="ghost-button">Close</button>
+            </div>
+            <img id="mapViewerImage" class="map-viewer-img" alt="Project map reference">
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
