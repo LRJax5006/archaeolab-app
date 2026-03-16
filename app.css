@@ -502,6 +502,20 @@ button:hover {
     gap: 10px;
 }
 
+.project-banner-actions .primary-button,
+.project-banner-actions .ghost-button,
+.project-banner-upload-btn {
+    background: var(--pine);
+    color: #ffffff;
+    border: none;
+}
+
+.project-banner-actions .primary-button:hover,
+.project-banner-actions .ghost-button:hover,
+.project-banner-upload-btn:hover {
+    background: var(--pine-dark);
+}
+
 .project-banner-upload-btn {
     cursor: pointer;
     border: none;
@@ -509,13 +523,10 @@ button:hover {
     padding: 12px 18px;
     font: inherit;
     font-weight: 700;
-    background: var(--accent);
-    color: #ffffff;
     transition: transform 120ms ease, background-color 120ms ease;
 }
 
 .project-banner-upload-btn:hover {
-    background: var(--accent-dark);
     transform: translateY(-1px);
 }
 
