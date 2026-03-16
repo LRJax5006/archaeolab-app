@@ -9,6 +9,7 @@ const maxReferencePhotoSizeBytes = 4 * 1024 * 1024;
 const maxImageSourceSizeBytes = 20 * 1024 * 1024;
 const approximateLocalStorageQuotaBytes = 5 * 1024 * 1024;
 const defaultReferencePhotoSrc = "IMG_3376.JPG";
+const defaultMapViewerTitle = "Project Map Reference";
 const persistStratumPhotoBlobsInBrowser = false;
 const importQualityProfiles = {
     balanced: {
@@ -47,6 +48,8 @@ const draftPhotoBlobs = new Map();
 
 let photoDatabasePromise;
 let importQualityMode = "sharp";
+let pendingSavedPhotoOpenName = "";
+let activeMapViewerObjectUrl = "";
 const dataSafetyState = {
     loadedFromCoreBackup: false,
     lastFullSessionSaveOk: true,
@@ -380,8 +383,10 @@ function cacheElements() {
     elements.referencePhotoMessage = document.getElementById("referencePhotoMessage");
     elements.referencePhotoSavedHint = document.getElementById("referencePhotoSavedHint");
     elements.mapViewerModal = document.getElementById("mapViewerModal");
+    elements.mapViewerTitle = document.getElementById("mapViewerTitle");
     elements.mapViewerImage = document.getElementById("mapViewerImage");
     elements.closeMapViewerButton = document.getElementById("closeMapViewerButton");
+    elements.savedPhotoOpenInput = document.getElementById("savedPhotoOpenInput");
 }
 
 function bindEvents() {
@@ -459,6 +464,11 @@ function bindEvents() {
     elements.savedStpSortSelect.addEventListener("change", handleSavedStpFilterInput);
     elements.clearProjectFiltersButton.addEventListener("click", clearProjectFilters);
     elements.clearSavedStpFiltersButton.addEventListener("click", clearSavedStpFilters);
+    elements.savedStpList.addEventListener("click", handleSavedStpListClick);
+
+    if (elements.savedPhotoOpenInput) {
+        elements.savedPhotoOpenInput.addEventListener("change", handleSavedPhotoOpenSelection);
+    }
 
     elements.strataList.addEventListener("click", handleStrataListClick);
     elements.strataList.addEventListener("input", handleStrataListInput);
@@ -1354,6 +1364,26 @@ function handleStrataListClick(event) {
         return;
     }
 
+    const openPhotoButton = event.target.closest("[data-photo-open]");
+
+    if (openPhotoButton) {
+        const card = openPhotoButton.closest(".stratum-card");
+
+        if (!card) {
+            return;
+        }
+
+        const openIndex = Number(openPhotoButton.getAttribute("data-photo-open"));
+        const entries = getCardPhotoEntries(card);
+
+        if (Number.isNaN(openIndex) || openIndex < 0 || openIndex >= entries.length) {
+            return;
+        }
+
+        requestSavedPhotoOpen(entries[openIndex].name);
+        return;
+    }
+
     const removeButton = event.target.closest("[data-remove-stratum]");
 
     if (!removeButton) {
@@ -1504,6 +1534,62 @@ function handleStrataListChange(event) {
     validatePhotoNamesForCard(card);
     renderPhotoListForCard(card);
     field.value = "";
+}
+
+function handleSavedStpListClick(event) {
+    const openButton = event.target.closest("[data-open-photo-name]");
+
+    if (!openButton) {
+        return;
+    }
+
+    const photoName = openButton.getAttribute("data-open-photo-name") || "Photo";
+    requestSavedPhotoOpen(photoName);
+}
+
+function requestSavedPhotoOpen(photoName) {
+    if (!elements.savedPhotoOpenInput) {
+        alert("Photo opening is not available in this browser.");
+        return;
+    }
+
+    pendingSavedPhotoOpenName = normalizeTextValue(photoName) || "Photo";
+    elements.savedPhotoOpenInput.value = "";
+
+    try {
+        if (typeof elements.savedPhotoOpenInput.showPicker === "function") {
+            elements.savedPhotoOpenInput.showPicker();
+        } else {
+            elements.savedPhotoOpenInput.click();
+        }
+    } catch (error) {
+        elements.savedPhotoOpenInput.click();
+    }
+}
+
+function handleSavedPhotoOpenSelection() {
+    if (!elements.savedPhotoOpenInput) {
+        return;
+    }
+
+    const file = elements.savedPhotoOpenInput.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    if (!(file.type || "").toLowerCase().startsWith("image/")) {
+        alert("Select an image file to open.");
+        elements.savedPhotoOpenInput.value = "";
+        return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const viewerTitle = pendingSavedPhotoOpenName || file.name || "Photo";
+    openImageInModal(objectUrl, viewerTitle, true);
+
+    elements.savedPhotoOpenInput.value = "";
+    pendingSavedPhotoOpenName = "";
 }
 
 function sanitizeToken(value) {
@@ -2083,14 +2169,25 @@ function renderPhotoListForCard(card) {
             nameInput.setAttribute("data-photo-index", String(index));
             nameInput.setAttribute("aria-label", "Photo name " + String(index + 1));
 
+            const actions = document.createElement("div");
+            actions.className = "photo-item-actions";
+
+            const openButton = document.createElement("button");
+            openButton.type = "button";
+            openButton.className = "photo-open-button";
+            openButton.setAttribute("data-photo-open", String(index));
+            openButton.textContent = "Open";
+
             const removeButton = document.createElement("button");
             removeButton.type = "button";
             removeButton.className = "photo-remove-button";
             removeButton.setAttribute("data-photo-remove", String(index));
             removeButton.textContent = "Delete";
 
+            actions.appendChild(openButton);
+            actions.appendChild(removeButton);
             item.appendChild(nameInput);
-            item.appendChild(removeButton);
+            item.appendChild(actions);
             listElement.appendChild(item);
         });
     }
@@ -2446,8 +2543,6 @@ function renderSavedStps() {
         stp.strata.forEach(function (stratum) {
             const row = document.createElement("tr");
 
-            const photoText = getStratumPhotoNames(stratum).join("; ");
-
             [
                 stratum.stratumLabel,
                 stratum.depth,
@@ -2455,14 +2550,39 @@ function renderSavedStps() {
                 stratum.soilType,
                 stratum.horizon,
                 stratum.artifactCatalog,
-                stratum.artifactSummary,
-                photoText,
-                stratum.notes
+                stratum.artifactSummary
             ].forEach(function (value) {
                 const cell = document.createElement("td");
                 cell.textContent = value || "-";
                 row.appendChild(cell);
             });
+
+            const photosCell = document.createElement("td");
+            const photoNames = getStratumPhotoNames(stratum);
+
+            if (photoNames.length === 0) {
+                photosCell.textContent = "-";
+            } else {
+                const photoLinks = document.createElement("div");
+                photoLinks.className = "saved-photo-links";
+
+                photoNames.forEach(function (photoName) {
+                    const openButton = document.createElement("button");
+                    openButton.type = "button";
+                    openButton.className = "saved-photo-open-button";
+                    openButton.setAttribute("data-open-photo-name", photoName);
+                    openButton.textContent = photoName;
+                    photoLinks.appendChild(openButton);
+                });
+
+                photosCell.appendChild(photoLinks);
+            }
+
+            row.appendChild(photosCell);
+
+            const notesCell = document.createElement("td");
+            notesCell.textContent = stratum.notes || "-";
+            row.appendChild(notesCell);
 
             tbody.appendChild(row);
         });
@@ -3626,24 +3746,46 @@ function handleMapViewerEscape(event) {
     }
 }
 
+function openImageInModal(imageSource, titleText, shouldRevokeOnClose) {
+    if (!elements.mapViewerModal || !elements.mapViewerImage || !elements.closeMapViewerButton) {
+        return;
+    }
+
+    if (activeMapViewerObjectUrl) {
+        URL.revokeObjectURL(activeMapViewerObjectUrl);
+        activeMapViewerObjectUrl = "";
+    }
+
+    if (shouldRevokeOnClose) {
+        activeMapViewerObjectUrl = imageSource;
+    }
+
+    if (elements.mapViewerTitle) {
+        elements.mapViewerTitle.textContent = titleText || defaultMapViewerTitle;
+    }
+
+    elements.mapViewerImage.alt = titleText || defaultMapViewerTitle;
+    elements.mapViewerImage.src = imageSource;
+    elements.mapViewerModal.hidden = false;
+    elements.mapViewerModal.setAttribute("aria-hidden", "false");
+    document.body.style.overflow = "hidden";
+    elements.closeMapViewerButton.focus();
+}
+
 function openMapViewer() {
     if (!state.projectImage) {
         return;
     }
 
     const mapWindow = window.open("", "_blank");
+    const pageTitle = (state.siteName || "Project") + " Map Reference";
 
     if (!mapWindow) {
         setProjectImageMessage("Popup blocked. Allow popups to open the map in a new page.", true);
-        elements.mapViewerImage.src = state.projectImage;
-        elements.mapViewerModal.hidden = false;
-        elements.mapViewerModal.setAttribute("aria-hidden", "false");
-        document.body.style.overflow = "hidden";
-        elements.closeMapViewerButton.focus();
+        openImageInModal(state.projectImage, pageTitle, false);
         return;
     }
 
-    const pageTitle = (state.siteName || "Project") + " Map Reference";
     const viewerMarkup = [
         "<!DOCTYPE html>",
         "<html lang=\"en\">",
@@ -3684,9 +3826,20 @@ function closeMapViewer() {
         return;
     }
 
+    if (activeMapViewerObjectUrl) {
+        URL.revokeObjectURL(activeMapViewerObjectUrl);
+        activeMapViewerObjectUrl = "";
+    }
+
     elements.mapViewerModal.hidden = true;
     elements.mapViewerModal.setAttribute("aria-hidden", "true");
     elements.mapViewerImage.src = "";
+    elements.mapViewerImage.alt = defaultMapViewerTitle;
+
+    if (elements.mapViewerTitle) {
+        elements.mapViewerTitle.textContent = defaultMapViewerTitle;
+    }
+
     document.body.style.overflow = "";
 }
 

@@ -354,7 +354,7 @@
 
                 <div class="field field-notes">
                     <span>Photo Names (editable)</span>
-                    <p class="photo-help">Photos are auto-named from the rule. Edit names below or remove any incorrect entry. Saved STPs keep photo labels only; photo files remain in your phone storage.</p>
+                    <p class="photo-help">Photos are auto-named from the rule. Edit names below or remove any incorrect entry. Saved STPs keep photo labels only; photo files remain in your phone storage. Use Open to select and preview a matching photo from your device.</p>
                     <ul class="photo-list" data-photo-list></ul>
                     <p class="photo-warning" data-photo-warning></p>
                 </div>
@@ -374,12 +374,14 @@
     <div id="mapViewerModal" class="map-viewer" hidden aria-hidden="true">
         <div class="map-viewer-dialog" role="dialog" aria-modal="true" aria-label="Project map reference">
             <div class="map-viewer-head">
-                <p class="map-viewer-title">Project Map Reference</p>
+                <p id="mapViewerTitle" class="map-viewer-title">Project Map Reference</p>
                 <button type="button" id="closeMapViewerButton" class="ghost-button">Close</button>
             </div>
             <img id="mapViewerImage" class="map-viewer-img" alt="Project map reference">
         </div>
     </div>
+
+    <input type="file" id="savedPhotoOpenInput" accept="image/*" hidden>
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>

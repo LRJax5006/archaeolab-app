@@ -619,10 +619,17 @@ button:hover {
     align-items: center;
 }
 
+.photo-item-actions {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+}
+
 .photo-name-input {
     width: 100%;
 }
 
+.photo-open-button,
 .photo-remove-button {
     border: 2px solid rgba(0, 0, 0, 0.46);
     background: rgba(255, 255, 255, 0.88);
@@ -633,7 +640,31 @@ button:hover {
     cursor: pointer;
 }
 
+.photo-open-button:hover,
 .photo-remove-button:hover {
+    background: rgba(200, 155, 42, 0.3);
+}
+
+.saved-photo-links {
+    display: grid;
+    gap: 6px;
+}
+
+.saved-photo-open-button {
+    width: auto;
+    justify-self: start;
+    border: 2px solid rgba(0, 0, 0, 0.42);
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-weight: 700;
+    font-size: 0.84rem;
+    text-align: left;
+    cursor: pointer;
+}
+
+.saved-photo-open-button:hover {
     background: rgba(200, 155, 42, 0.3);
 }
 
@@ -906,7 +937,9 @@ body.high-contrast .secondary-button:hover {
 
 body.high-contrast .ghost-button,
 body.high-contrast .link-button,
-body.high-contrast .photo-remove-button {
+body.high-contrast .photo-remove-button,
+body.high-contrast .photo-open-button,
+body.high-contrast .saved-photo-open-button {
     background: #ffffff;
     color: #000000;
     border: 2px solid #000000;
@@ -914,7 +947,9 @@ body.high-contrast .photo-remove-button {
 
 body.high-contrast .ghost-button:hover,
 body.high-contrast .link-button:hover,
-body.high-contrast .photo-remove-button:hover {
+body.high-contrast .photo-remove-button:hover,
+body.high-contrast .photo-open-button:hover,
+body.high-contrast .saved-photo-open-button:hover {
     background: #ffe49c;
 }
 
@@ -1094,6 +1129,12 @@ body.high-contrast .map-viewer-img {
         grid-template-columns: 1fr;
     }
 
+    .photo-item-actions {
+        justify-self: start;
+        flex-wrap: wrap;
+    }
+
+    .photo-open-button,
     .photo-remove-button {
         width: auto;
         justify-self: start;
@@ -1106,6 +1147,10 @@ body.high-contrast .map-viewer-img {
     .photo-capture-button {
         width: auto;
         justify-self: start;
+    }
+
+    .saved-photo-open-button {
+        width: auto;
     }
 }
 
