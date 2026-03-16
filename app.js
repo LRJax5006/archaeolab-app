@@ -1020,6 +1020,36 @@ function renumberStrata() {
 }
 
 function handleStrataListClick(event) {
+    const cameraButton = event.target.closest("[data-photo-capture]");
+
+    if (cameraButton) {
+        const card = cameraButton.closest(".stratum-card");
+
+        if (!card) {
+            return;
+        }
+
+        const cameraInput = card.querySelector('[data-field="cameraPhoto"]');
+
+        if (!cameraInput) {
+            return;
+        }
+
+        cameraInput.value = "";
+
+        try {
+            if (typeof cameraInput.showPicker === "function") {
+                cameraInput.showPicker();
+            } else {
+                cameraInput.click();
+            }
+        } catch (error) {
+            cameraInput.click();
+        }
+
+        return;
+    }
+
     const removePhotoButton = event.target.closest("[data-photo-remove]");
 
     if (removePhotoButton) {
@@ -1152,7 +1182,7 @@ function handleStrataListChange(event) {
 
     const fieldName = field.getAttribute("data-field");
 
-    if (fieldName !== "photos") {
+    if (fieldName !== "photos" && fieldName !== "cameraPhoto") {
         return;
     }
 

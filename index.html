@@ -323,8 +323,14 @@
                     <input type="text" data-field="artifactSummary" placeholder="Ceramic, glass, metal, lithics, etc.">
                 </label>
 
+                <div class="field">
+                    <span>Take Photo</span>
+                    <button type="button" class="secondary-button photo-capture-button" data-photo-capture>Open Camera</button>
+                    <input type="file" data-field="cameraPhoto" accept="image/*" capture="environment" class="camera-photo-input" aria-label="Take photo with camera">
+                </div>
+
                 <label class="field">
-                    <span>Open Camera</span>
+                    <span>Add Existing Photos</span>
                     <input type="file" data-field="photos" accept="image/*" multiple>
                 </label>
 
