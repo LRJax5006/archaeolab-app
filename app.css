@@ -444,7 +444,7 @@ button:hover {
     min-height: 220px;
     border-radius: 22px;
     overflow: hidden;
-    margin-bottom: 22px;
+    margin-bottom: 10px;
     background:
         linear-gradient(180deg, rgba(23, 31, 28, 0.16), rgba(23, 31, 28, 0.44)),
         linear-gradient(90deg, rgba(247, 240, 228, 0.5), rgba(247, 240, 228, 0.12)),
@@ -454,6 +454,12 @@ button:hover {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.project-banner-meta {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 22px;
 }
 
 .project-banner-img {
