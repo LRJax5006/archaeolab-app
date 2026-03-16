@@ -663,32 +663,57 @@ button:hover {
     color: var(--ink-soft);
 }
 
-.saved-strata {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-    min-width: 860px;
+.saved-strata-list {
+    display: flex;
+    flex-direction: column;
 }
 
-.saved-strata th,
-.saved-strata td {
-    padding: 10px 8px;
-    border-bottom: 1px solid var(--line);
-    text-align: left;
-    vertical-align: top;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+.saved-stratum-item {
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
 }
 
-.saved-strata th {
-    font-size: 0.82rem;
+.saved-stratum-item-head {
+    font-size: 0.78rem;
+    font-weight: 700;
     letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 6px;
+}
+
+.saved-stratum-data {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+}
+
+.ssd-cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 90px;
+}
+
+.ssd-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
     color: var(--ink-soft);
 }
 
-.saved-strata tr:last-child td {
-    border-bottom: none;
+.ssd-value {
+    font-size: 0.9rem;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.saved-stratum-photos {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
 }
 
 .photo-list {
@@ -1256,10 +1281,8 @@ body.high-contrast .map-viewer-img {
         width: auto;
     }
 
-    .saved-strata {
-        min-width: 740px;
-    }
 }
+
 
 @media (max-width: 520px) {
     .page-shell {

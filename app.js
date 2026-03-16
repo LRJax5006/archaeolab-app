@@ -3105,47 +3105,55 @@ function renderSavedStps() {
         titleWrap.appendChild(meta);
         header.appendChild(titleWrap);
 
-        const table = document.createElement("table");
-        table.className = "saved-strata";
+        const strataContainer = document.createElement("div");
+        strataContainer.className = "saved-strata-list";
 
-        const headRow = document.createElement("tr");
-        ["Stratum", "Depth", "Munsell", "Soil Type", "Horizon", "Artifact Catalog", "Artifact Summary", "Photos", "Notes"].forEach(function (label) {
-            const heading = document.createElement("th");
-            heading.textContent = label;
-            headRow.appendChild(heading);
-        });
-
-        const thead = document.createElement("thead");
-        thead.appendChild(headRow);
-        table.appendChild(thead);
-
-        const tbody = document.createElement("tbody");
         stp.strata.forEach(function (stratum) {
-            const row = document.createElement("tr");
+            const item = document.createElement("div");
+            item.className = "saved-stratum-item";
 
-            [
-                stratum.stratumLabel,
-                stratum.depth,
-                stratum.munsell,
-                stratum.soilType,
-                stratum.horizon,
-                stratum.artifactCatalog,
-                stratum.artifactSummary
-            ].forEach(function (value) {
-                const cell = document.createElement("td");
-                cell.textContent = value || "-";
-                row.appendChild(cell);
-            });
+            const itemHead = document.createElement("div");
+            itemHead.className = "saved-stratum-item-head";
+            itemHead.textContent = "Stratum " + (stratum.stratumLabel || "-");
+            item.appendChild(itemHead);
 
-            const photosCell = document.createElement("td");
+            const dataGrid = document.createElement("div");
+            dataGrid.className = "saved-stratum-data";
+
+            function addField(label, value) {
+                if (!value) return;
+                const cell = document.createElement("div");
+                cell.className = "ssd-cell";
+                const lbl = document.createElement("span");
+                lbl.className = "ssd-label";
+                lbl.textContent = label;
+                const val = document.createElement("span");
+                val.className = "ssd-value";
+                val.textContent = value;
+                cell.appendChild(lbl);
+                cell.appendChild(val);
+                dataGrid.appendChild(cell);
+            }
+
+            addField("Depth", stratum.depth);
+            addField("Munsell", stratum.munsell);
+            addField("Soil Type", stratum.soilType);
+            addField("Horizon", stratum.horizon);
+            addField("Artifact Catalog", stratum.artifactCatalog);
+            addField("Artifact Summary", stratum.artifactSummary);
+            addField("Notes", stratum.notes);
+
+            item.appendChild(dataGrid);
+
             const photoNames = getStratumPhotoNames(stratum);
-
-            if (photoNames.length === 0) {
-                photosCell.textContent = "-";
-            } else {
+            if (photoNames.length > 0) {
+                const photosRow = document.createElement("div");
+                photosRow.className = "saved-stratum-photos";
+                const photosLabel = document.createElement("span");
+                photosLabel.className = "ssd-label";
+                photosLabel.textContent = "Photos";
                 const photoLinks = document.createElement("div");
                 photoLinks.className = "saved-photo-links";
-
                 photoNames.forEach(function (photoName) {
                     const openButton = document.createElement("button");
                     openButton.type = "button";
@@ -3154,22 +3162,16 @@ function renderSavedStps() {
                     openButton.textContent = photoName;
                     photoLinks.appendChild(openButton);
                 });
-
-                photosCell.appendChild(photoLinks);
+                photosRow.appendChild(photosLabel);
+                photosRow.appendChild(photoLinks);
+                item.appendChild(photosRow);
             }
 
-            row.appendChild(photosCell);
-
-            const notesCell = document.createElement("td");
-            notesCell.textContent = stratum.notes || "-";
-            row.appendChild(notesCell);
-
-            tbody.appendChild(row);
+            strataContainer.appendChild(item);
         });
 
-        table.appendChild(tbody);
         card.appendChild(header);
-        card.appendChild(table);
+        card.appendChild(strataContainer);
         elements.savedStpList.appendChild(card);
     });
 }
