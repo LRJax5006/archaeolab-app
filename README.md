@@ -39,6 +39,16 @@ This repository includes an automatic Pages workflow.
 - Data is stored in each tester's browser local storage.
 - Saved projects and uploaded map images are browser-local and not shared between users.
 
+## Short Tester Guide
+
+1. Open the live app and confirm all sections load.
+2. Create one STP with at least two strata and save it.
+3. Upload a map image and verify it opens as a reference view.
+4. Save the session as a project, then load that project.
+5. Export XLSX and CSV to confirm downloads work.
+
+When reporting bugs, include browser/device, exact steps, expected result, actual result, and a screenshot if possible.
+
 ## Optional: Install Git On This Machine
 
 Git was not available in this terminal session. If you want command-line push support, install Git for Windows:

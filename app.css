@@ -193,6 +193,24 @@ h1 {
     line-height: 1.6;
 }
 
+.tester-guide-list {
+    margin: 0;
+    padding-left: 20px;
+    color: var(--ink-soft);
+    display: grid;
+    gap: 8px;
+}
+
+.tester-guide-list li {
+    line-height: 1.45;
+}
+
+.tester-guide-note {
+    margin: 14px 0 0;
+    color: var(--ink-soft);
+    line-height: 1.5;
+}
+
 .mapping-note strong {
     color: var(--ink);
 }
