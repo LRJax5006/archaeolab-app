@@ -33,8 +33,10 @@ body {
 }
 
 .page-shell {
-    width: min(1180px, calc(100% - 32px));
+    width: 100%;
+    max-width: 1180px;
     margin: 24px auto 48px;
+    padding: 0 16px;
 }
 
 .hero {
@@ -890,11 +892,46 @@ body.high-contrast .map-viewer-img {
 }
 
 @media (max-width: 860px) {
+    .page-shell {
+        margin: 16px auto 32px;
+        padding: 0 12px;
+    }
+
     .hero,
     .entry-layout,
     .field-grid,
     .stratum-grid {
         grid-template-columns: 1fr;
+    }
+
+    .hero {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .hero > div,
+    .hero-card {
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+    }
+
+    .hero-card {
+        align-self: stretch;
+    }
+
+    .intro {
+        max-width: none;
+    }
+
+    .project-banner {
+        min-height: 190px;
+    }
+
+    .project-banner-meta {
+        margin-bottom: 16px;
     }
 
     .panel-filters,
@@ -962,5 +999,41 @@ body.high-contrast .map-viewer-img {
 
     button {
         width: 100%;
+    }
+}
+
+@media (max-width: 520px) {
+    .page-shell {
+        margin: 12px auto 24px;
+        padding: 0 10px;
+    }
+
+    .project-banner,
+    .hero-card,
+    .panel {
+        border-radius: 16px;
+    }
+
+    .project-banner {
+        min-height: 170px;
+    }
+
+    .project-banner-empty {
+        padding: 20px;
+    }
+
+    .project-banner-overlay {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        padding: 8px;
+    }
+
+    h1 {
+        font-size: clamp(1.65rem, 8.2vw, 2.3rem);
+    }
+
+    .session-status {
+        font-size: 1.35rem;
     }
 }
