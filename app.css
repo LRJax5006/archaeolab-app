@@ -464,10 +464,6 @@ button:hover {
     inset: 0;
 }
 
-.project-banner-img.is-clickable {
-    cursor: zoom-in;
-}
-
 .project-banner-empty {
     color: var(--ink-soft);
     text-align: center;

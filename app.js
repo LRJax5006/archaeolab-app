@@ -302,6 +302,7 @@ function cacheElements() {
     elements.projectBannerImg = document.getElementById("projectBannerImg");
     elements.projectBannerEmpty = document.getElementById("projectBannerEmpty");
     elements.projectImageInput = document.getElementById("projectImageInput");
+    elements.openProjectImageButton = document.getElementById("openProjectImageButton");
     elements.removeProjectImageButton = document.getElementById("removeProjectImageButton");
     elements.projectImageMessage = document.getElementById("projectImageMessage");
     elements.mapViewerModal = document.getElementById("mapViewerModal");
@@ -325,9 +326,8 @@ function bindEvents() {
     elements.suggestLabelButton.addEventListener("click", suggestFromCurrentInput);
     elements.saveProjectButton.addEventListener("click", saveProjectAndStartNew);
     elements.projectImageInput.addEventListener("change", handleProjectImageUpload);
+    elements.openProjectImageButton.addEventListener("click", openMapViewer);
     elements.removeProjectImageButton.addEventListener("click", removeProjectImage);
-    elements.projectBannerImg.addEventListener("click", openMapViewer);
-    elements.projectBannerImg.addEventListener("keydown", handleProjectBannerKeyDown);
     elements.closeMapViewerButton.addEventListener("click", closeMapViewer);
     elements.mapViewerModal.addEventListener("click", handleMapViewerClick);
     document.addEventListener("keydown", handleMapViewerEscape);
@@ -1961,15 +1961,6 @@ function setProjectImageMessage(text, isError) {
     elements.projectImageMessage.classList.toggle("is-error", Boolean(isError));
 }
 
-function handleProjectBannerKeyDown(event) {
-    if (event.key !== "Enter" && event.key !== " ") {
-        return;
-    }
-
-    event.preventDefault();
-    openMapViewer();
-}
-
 function handleMapViewerClick(event) {
     if (event.target === elements.mapViewerModal) {
         closeMapViewer();
@@ -2080,7 +2071,7 @@ function handleProjectImageUpload() {
 
         renderProjectBanner();
         setProjectImageMessage(
-            "Map image loaded: " + file.name + " (" + bytesToMegabytesText(file.size) + " MB). Click map to open a new page reference.",
+            "Map image loaded: " + file.name + " (" + bytesToMegabytesText(file.size) + " MB). Use View Map Full Screen to expand it.",
             false
         );
     });
@@ -2106,10 +2097,8 @@ function renderProjectBanner() {
     const hasImage = Boolean(state.projectImage);
     elements.projectBannerImg.hidden = !hasImage;
     elements.projectBannerEmpty.hidden = hasImage;
+    elements.openProjectImageButton.hidden = !hasImage;
     elements.removeProjectImageButton.hidden = !hasImage;
-    elements.projectBannerImg.classList.toggle("is-clickable", hasImage);
-    elements.projectBannerImg.tabIndex = hasImage ? 0 : -1;
-    elements.projectBannerImg.title = hasImage ? "Open map in a new page" : "";
 
     if (hasImage) {
         elements.projectBannerImg.src = state.projectImage;
