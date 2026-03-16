@@ -1036,7 +1036,17 @@ function handleStrataListClick(event) {
         }
 
         cameraInput.value = "";
-        cameraInput.click();
+
+        try {
+            if (typeof cameraInput.showPicker === "function") {
+                cameraInput.showPicker();
+            } else {
+                cameraInput.click();
+            }
+        } catch (error) {
+            cameraInput.click();
+        }
+
         return;
     }
 
