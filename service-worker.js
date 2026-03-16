@@ -1,9 +1,11 @@
-const CACHE_NAME = "archaeolab-shell-v1";
+const CACHE_NAME = "archaeolab-shell-v2";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./app.css",
   "./app.js",
+  "./gps-map.html",
+  "./gps-map.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
@@ -41,7 +43,15 @@ self.addEventListener("fetch", (event) => {
 
   if (event.request.mode === "navigate") {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match("./index.html"))
+      fetch(event.request).catch(() =>
+        caches.match(event.request, { ignoreSearch: true }).then((cachedPage) => {
+          if (cachedPage) {
+            return cachedPage;
+          }
+
+          return caches.match("./index.html");
+        })
+      )
     );
     return;
   }

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#b21e1e">
+    <title>GPS Points Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            background: #f2ecdf;
+            color: #1f2b26;
+            font-family: Trebuchet MS, Gill Sans, sans-serif;
+            display: grid;
+            grid-template-rows: auto 1fr;
+        }
+
+        .top {
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            background: #b21e1e;
+            color: #fff;
+            flex-wrap: wrap;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+        }
+
+        .top-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        button,
+        .button-link {
+            border: none;
+            border-radius: 999px;
+            padding: 10px 14px;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+            background: #f4b63e;
+            color: #352005;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .button-link.ghost {
+            background: rgba(255, 255, 255, 0.16);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.45);
+        }
+
+        .layout {
+            padding: 12px;
+            display: grid;
+            gap: 10px;
+            grid-template-rows: minmax(320px, 62vh) auto auto auto;
+        }
+
+        .map-canvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 12px;
+            border: 1px solid rgba(0, 0, 0, 0.2);
+            overflow: hidden;
+            background: #ddd;
+        }
+
+        .map-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .map-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: #1f2b26;
+        }
+
+        .map-toggle input {
+            accent-color: #b21e1e;
+        }
+
+        .map-legend {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.84rem;
+            font-weight: 700;
+            color: #2b3a34;
+        }
+
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 999px;
+            border: 2px solid transparent;
+            display: inline-block;
+        }
+
+        .status {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #2e3a35;
+        }
+
+        .status.error {
+            color: #8b1f1f;
+        }
+
+        .list-title {
+            margin: 0;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .point-list {
+            margin: 0;
+            padding: 0 0 0 20px;
+            display: grid;
+            gap: 6px;
+            max-height: 26vh;
+            overflow: auto;
+        }
+
+        .point-list li {
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 720px) {
+            .layout {
+                grid-template-rows: minmax(260px, 56vh) auto auto auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="top">
+        <p id="gpsMapTitle" class="title">GPS Points Map</p>
+        <div class="top-actions">
+            <a href="./index.html" class="button-link ghost">Back to App</a>
+            <button type="button" id="closeMapButton">Close</button>
+        </div>
+    </header>
+
+    <main class="layout">
+        <div id="gpsMapCanvas" class="map-canvas" role="img" aria-label="Map with plotted GPS points"></div>
+
+        <div class="map-controls">
+            <label class="map-toggle">
+                <input type="checkbox" id="connectPointsToggle">
+                Connect points in save order
+            </label>
+            <div id="gpsTypeLegend" class="map-legend" aria-label="Point type legend"></div>
+        </div>
+
+        <p id="gpsMapStatus" class="status">Loading map...</p>
+
+        <section>
+            <h2 class="list-title">Plotted Points</h2>
+            <ol id="gpsPointList" class="point-list"></ol>
+        </section>
+    </main>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="./gps-map.js"></script>
+</body>
+</html>

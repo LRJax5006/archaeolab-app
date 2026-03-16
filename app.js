@@ -11,6 +11,7 @@ const fileHandlesStore = "file-handles";
 const appDataDatabaseVersion = 2;
 const appDataSessionEntryKey = "session";
 const appDataProjectsEntryKey = "projects";
+const gpsMapPayloadStorageKey = "archaeolab-gps-map-payload-v1";
 const maxProjectImageSizeBytes = 4 * 1024 * 1024;
 const maxReferencePhotoSizeBytes = 4 * 1024 * 1024;
 const maxImageSourceSizeBytes = 20 * 1024 * 1024;
@@ -4644,121 +4645,31 @@ function openGpsPointsMap() {
         return;
     }
 
-    const mapWindow = window.open("", "_blank");
     const pageTitle = (state.siteName || "Project") + " GPS Points Map";
-
-    if (!mapWindow) {
-        alert("Popup blocked. Allow popups to open the GPS points map.");
-        return;
-    }
-
-    const viewerMarkup = [
-        "<!DOCTYPE html>",
-        "<html lang=\"en\">",
-        "<head>",
-        "<meta charset=\"utf-8\">",
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
-        "<title>GPS Points Map</title>",
-        "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\">",
-        "<style>",
-        "*{box-sizing:border-box}",
-        "body{margin:0;min-height:100vh;background:#f2ecdf;color:#1f2b26;font-family:Trebuchet MS,Gill Sans,sans-serif;display:grid;grid-template-rows:auto 1fr}",
-        ".top{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#b21e1e;color:#fff}",
-        ".title{margin:0;font-size:1rem;font-weight:700;letter-spacing:0.01em}",
-        "button{border:none;border-radius:999px;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer;background:#f4b63e;color:#352005}",
-        ".layout{padding:12px;display:grid;gap:10px;grid-template-rows:minmax(320px,62vh) auto auto auto}",
-        ".map-canvas{width:100%;height:100%;border-radius:12px;border:1px solid rgba(0,0,0,0.2);overflow:hidden;background:#ddd}",
-        ".map-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}",
-        ".map-toggle{display:inline-flex;align-items:center;gap:8px;font-size:0.92rem;font-weight:700;color:#1f2b26}",
-        ".map-toggle input{accent-color:#b21e1e}",
-        ".map-legend{display:flex;align-items:center;gap:10px;flex-wrap:wrap}",
-        ".legend-item{display:inline-flex;align-items:center;gap:6px;font-size:0.84rem;font-weight:700;color:#2b3a34}",
-        ".legend-dot{width:12px;height:12px;border-radius:999px;border:2px solid transparent;display:inline-block}",
-        ".status{margin:0;font-size:0.95rem;color:#2e3a35}",
-        ".status.error{color:#8b1f1f}",
-        ".list-title{margin:0;font-size:0.95rem;font-weight:700}",
-        ".point-list{margin:0;padding:0 0 0 20px;display:grid;gap:6px;max-height:26vh;overflow:auto}",
-        ".point-list li{font-size:0.9rem}",
-        "</style>",
-        "</head>",
-        "<body>",
-        "<div class=\"top\"><p id=\"gpsMapTitle\" class=\"title\">GPS Points Map</p><button type=\"button\" onclick=\"window.close()\">Close</button></div>",
-        "<main class=\"layout\">",
-        "<div id=\"gpsMapCanvas\" class=\"map-canvas\" role=\"img\" aria-label=\"Map with plotted GPS points\"></div>",
-        "<div class=\"map-controls\">",
-        "<label class=\"map-toggle\"><input type=\"checkbox\" id=\"connectPointsToggle\"> Connect points in save order</label>",
-        "<div id=\"gpsTypeLegend\" class=\"map-legend\" aria-label=\"Point type legend\"></div>",
-        "</div>",
-        "<p id=\"gpsMapStatus\" class=\"status\">Loading map...</p>",
-        "<h2 class=\"list-title\">Plotted Points</h2>",
-        "<ol id=\"gpsPointList\" class=\"point-list\"></ol>",
-        "</main>",
-        "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>",
-        "<script>",
-        "(function(){",
-        "var mapInstance = null;",
-        "var markerLayer = null;",
-        "var routeLayer = null;",
-        "var activePoints = [];",
-        "var toggleBound = false;",
-        "function toText(value){return String(value == null ? '' : value);}",
-        "function escapeHtml(value){return toText(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}",
-        "function formatSavedAt(value){if(!value){return '';}var parsed = new Date(value);if(Number.isNaN(parsed.getTime())){return value;}return parsed.toLocaleString();}",
-        "function setStatus(text,isError){var statusEl=document.getElementById('gpsMapStatus');if(!statusEl){return;}statusEl.textContent=text||'';statusEl.className=isError?'status error':'status';}",
-        "function normalizeTypeKey(value){var key=toText(value).toLowerCase().trim();if(key==='supplemental'||key==='unit-id'||key==='base'){return key;}if(key.indexOf('supplemental')!==-1){return 'supplemental';}if(key.indexOf('unit')!==-1){return 'unit-id';}return 'base';}",
-        "function getTypeStyle(typeKey){if(typeKey==='supplemental'){return {fill:'#f4b63e',stroke:'#8f6000',label:'Supplemental STP'};}if(typeKey==='unit-id'){return {fill:'#2d8f84',stroke:'#14554f',label:'Unit ID'};}return {fill:'#b21e1e',stroke:'#5f0f0f',label:'Base STP'};}",
-        "function renderTypeLegend(){var legend=document.getElementById('gpsTypeLegend');if(!legend){return;}legend.innerHTML='';['base','supplemental','unit-id'].forEach(function(typeKey){var style=getTypeStyle(typeKey);var item=document.createElement('span');item.className='legend-item';var dot=document.createElement('span');dot.className='legend-dot';dot.style.backgroundColor=style.fill;dot.style.borderColor=style.stroke;var text=document.createElement('span');text.textContent=style.label;item.appendChild(dot);item.appendChild(text);legend.appendChild(item);});}",
-        "function renderPointList(points){var list=document.getElementById('gpsPointList');if(!list){return;}list.innerHTML='';points.forEach(function(point,index){var item=document.createElement('li');var label=point.label||('Point '+(index+1));var typeLabel=point.entryTypeLabel||getTypeStyle(point.entryTypeKey).label;item.textContent=label+' | '+typeLabel+' | '+point.latitude.toFixed(6)+', '+point.longitude.toFixed(6);list.appendChild(item);});}",
-        "function ensureMap(){if(typeof window.L==='undefined'){setStatus('Map tiles could not load. Check internet connection. Coordinates are listed below.',true);return false;}if(!mapInstance){mapInstance=window.L.map('gpsMapCanvas',{zoomControl:true});window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(mapInstance);markerLayer=window.L.layerGroup().addTo(mapInstance);routeLayer=window.L.layerGroup().addTo(mapInstance);}return true;}",
-        "function renderMapLayers(){if(!ensureMap()){return;}markerLayer.clearLayers();routeLayer.clearLayers();var bounds=[];var lineCoordinates=[];activePoints.forEach(function(point,index){var typeStyle=getTypeStyle(point.entryTypeKey);var marker=window.L.circleMarker([point.latitude,point.longitude],{radius:8,color:typeStyle.stroke,weight:2,fillColor:typeStyle.fill,fillOpacity:0.93}).addTo(markerLayer);var typeLabel=point.entryTypeLabel||typeStyle.label;var popupHtml='<strong>'+escapeHtml(point.label||('Point '+(index+1)))+'</strong><br>'+'<span>'+escapeHtml(typeLabel)+'</span><br>'+'<span>'+point.latitude.toFixed(6)+', '+point.longitude.toFixed(6)+'</span>'+(point.savedAt?'<br><span>Saved '+escapeHtml(formatSavedAt(point.savedAt))+'</span>':'');marker.bindPopup(popupHtml);bounds.push([point.latitude,point.longitude]);lineCoordinates.push([point.latitude,point.longitude]);});var connectToggle=document.getElementById('connectPointsToggle');var connectEnabled=Boolean(connectToggle&&connectToggle.checked);if(connectEnabled&&lineCoordinates.length>1){window.L.polyline(lineCoordinates,{color:'#243f3a',weight:3,opacity:0.75,dashArray:'8 6'}).addTo(routeLayer);}if(bounds.length===1){mapInstance.setView(bounds[0],17);}else{mapInstance.fitBounds(bounds,{padding:[28,28]});}setTimeout(function(){if(mapInstance){mapInstance.invalidateSize();}},120);var pointSummary=activePoints.length+(activePoints.length===1?' GPS point plotted.':' GPS points plotted.');var pathSummary=connectEnabled?' Connected path on.':' Connected path off.';setStatus(pointSummary+pathSummary,false);}",
-        "function bindToggle(){if(toggleBound){return;}var connectToggle=document.getElementById('connectPointsToggle');if(!connectToggle){return;}connectToggle.addEventListener('change',function(){renderMapLayers();});toggleBound=true;}",
-        "window.renderGpsPointsMap = function(payload){",
-        "var points=Array.isArray(payload&&payload.points)?payload.points:[];",
-        "var titleText=toText(payload&&payload.title?payload.title:'GPS Points Map');",
-        "document.title=titleText;",
-        "var titleElement=document.getElementById('gpsMapTitle');",
-        "if(titleElement){titleElement.textContent=titleText;}",
-        "activePoints=points.map(function(point,index){var latitude=Number(point&&point.latitude);var longitude=Number(point&&point.longitude);if(!Number.isFinite(latitude)||!Number.isFinite(longitude)){return null;}var typeKey=normalizeTypeKey(point&&point.entryTypeKey||point&&point.entryTypeLabel||point&&point.entryType);var typeLabel=toText(point&&point.entryTypeLabel)||getTypeStyle(typeKey).label;return {label:toText(point&&point.label)||('Point '+(index+1)),entryTypeKey:typeKey,entryTypeLabel:typeLabel,latitude:latitude,longitude:longitude,savedAt:toText(point&&point.savedAt)};}).filter(Boolean);",
-        "renderTypeLegend();",
-        "renderPointList(activePoints);",
-        "bindToggle();",
-        "if(activePoints.length===0){setStatus('No valid GPS points found.',true);return;}",
-        "renderMapLayers();",
-        "};",
-        "})();",
-        "</script>",
-        "</body>",
-        "</html>"
-    ].join("");
-
-    mapWindow.document.open();
-    mapWindow.document.write(viewerMarkup);
-    mapWindow.document.close();
-
     const payload = {
         title: pageTitle,
-        points: gpsPoints
+        points: gpsPoints,
+        savedAt: new Date().toISOString()
     };
-    let attempts = 0;
 
-    function handoffPayload() {
-        if (mapWindow.closed) {
-            return;
-        }
-
-        if (typeof mapWindow.renderGpsPointsMap === "function") {
-            mapWindow.renderGpsPointsMap(payload);
-            return;
-        }
-
-        attempts += 1;
-
-        if (attempts < 80) {
-            setTimeout(handoffPayload, 50);
-        }
+    try {
+        sessionStorage.setItem(gpsMapPayloadStorageKey, JSON.stringify(payload));
+    } catch (_error) {
+        // Fallback to localStorage below if sessionStorage is unavailable.
     }
 
-    handoffPayload();
+    try {
+        localStorage.setItem(gpsMapPayloadStorageKey, JSON.stringify(payload));
+    } catch (_error) {
+        // Non-fatal: map page may still receive payload from sessionStorage.
+    }
+
+    const mapWindow = window.open("./gps-map.html", "_blank");
+
+    if (!mapWindow) {
+        // Popup likely blocked: continue in the same tab so the user still gets the map.
+        window.location.href = "./gps-map.html";
+    }
 }
 
 function openImageInModal(imageSource, titleText, shouldRevokeOnClose) {
