@@ -7,12 +7,30 @@ Static web app for recording shovel test pits (STPs), strata, and exporting fiel
 - index.html: Application markup
 - app.css: Styling
 - app.js: App logic (local storage, exports, project library)
+- manifest.webmanifest: PWA metadata for installability
+- service-worker.js: Offline/app-shell caching for PWA behavior
+- icons/: Install icons (192x192, 512x512, Apple touch icon)
 - .github/workflows/deploy-pages.yml: GitHub Pages deployment workflow
 - .nojekyll: Disables Jekyll processing on GitHub Pages
 
 ## Local Testing
 
 Open index.html in a browser.
+
+## Install As An App (PWA)
+
+The app is configured as a Progressive Web App.
+
+Requirements:
+
+- Serve over HTTPS (GitHub Pages works)
+- Use a modern browser that supports installable PWAs
+
+Install options:
+
+- Android (Chrome): browser menu -> Add to Home screen / Install app
+- iPhone/iPad (Safari): Share -> Add to Home Screen
+- Desktop (Chrome/Edge): click the Install icon in the address bar
 
 ## Publish To GitHub Pages (Recommended)
 

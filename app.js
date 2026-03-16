@@ -324,6 +324,23 @@ function initializeApp() {
     resetCurrentStp(false);
     updateImageStorageStatus();
     updateDataSafetyStatus();
+    registerServiceWorker();
+}
+
+function registerServiceWorker() {
+    if (!("serviceWorker" in navigator)) {
+        return;
+    }
+
+    if (!window.isSecureContext) {
+        return;
+    }
+
+    window.addEventListener("load", function () {
+        navigator.serviceWorker.register("./service-worker.js").catch(function (error) {
+            console.warn("Could not register service worker.", error);
+        });
+    });
 }
 
 function cacheElements() {
