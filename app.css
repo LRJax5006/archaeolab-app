@@ -366,6 +366,27 @@ h1 {
     gap: 10px;
 }
 
+.gps-actions {
+    display: grid;
+    gap: 6px;
+}
+
+.gps-actions .secondary-button {
+    width: auto;
+    justify-self: start;
+}
+
+.gps-status {
+    margin: 0;
+    min-height: 1.2em;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+}
+
+.gps-status.is-error {
+    color: var(--error);
+}
+
 .field input,
 .field select,
 .field textarea {

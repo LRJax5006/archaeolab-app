@@ -10,6 +10,7 @@ const maxImageSourceSizeBytes = 20 * 1024 * 1024;
 const approximateLocalStorageQuotaBytes = 5 * 1024 * 1024;
 const defaultReferencePhotoSrc = "IMG_3376.JPG";
 const defaultMapViewerTitle = "Project Map Reference";
+const gpsCoordinateDecimalPlaces = 6;
 const persistStratumPhotoBlobsInBrowser = false;
 const importQualityProfiles = {
     balanced: {
@@ -334,6 +335,8 @@ function cacheElements() {
     elements.parentStp = document.getElementById("parentStp");
     elements.gpsLatitude = document.getElementById("gpsLatitude");
     elements.gpsLongitude = document.getElementById("gpsLongitude");
+    elements.useCurrentGpsButton = document.getElementById("useCurrentGpsButton");
+    elements.gpsStatusMessage = document.getElementById("gpsStatusMessage");
     elements.stpLabel = document.getElementById("stpLabel");
     elements.supDirection = document.getElementById("supDirection");
     elements.strataList = document.getElementById("strataList");
@@ -437,6 +440,10 @@ function bindEvents() {
     elements.siteName.addEventListener("input", updateSiteDraft);
     elements.siteLocation.addEventListener("input", updateSiteDraft);
     elements.depthUnit.addEventListener("change", updateSiteDraft);
+
+    if (elements.useCurrentGpsButton) {
+        elements.useCurrentGpsButton.addEventListener("click", handleUseCurrentGps);
+    }
 
     elements.stpEntryType.addEventListener("change", function () {
         updateStpTypeUi();
@@ -2255,6 +2262,90 @@ function updateStpTypeUi() {
     }
 }
 
+function setGpsStatusMessage(text, isError) {
+    if (!elements.gpsStatusMessage) {
+        return;
+    }
+
+    elements.gpsStatusMessage.textContent = text || "";
+    elements.gpsStatusMessage.classList.toggle("is-error", Boolean(isError));
+}
+
+function getGpsErrorMessage(error) {
+    if (!error || typeof error.code !== "number") {
+        return "Could not read phone GPS location.";
+    }
+
+    if (error.code === error.PERMISSION_DENIED) {
+        return "Location permission denied. Allow location access and try again.";
+    }
+
+    if (error.code === error.POSITION_UNAVAILABLE) {
+        return "Location is unavailable right now. Move to open sky and try again.";
+    }
+
+    if (error.code === error.TIMEOUT) {
+        return "Location request timed out. Try again.";
+    }
+
+    return "Could not read phone GPS location.";
+}
+
+function handleUseCurrentGps() {
+    if (!("geolocation" in navigator)) {
+        setGpsStatusMessage("Phone GPS is not supported in this browser.", true);
+        return;
+    }
+
+    if (!window.isSecureContext) {
+        setGpsStatusMessage("GPS requires a secure connection (HTTPS).", true);
+        return;
+    }
+
+    if (elements.useCurrentGpsButton) {
+        elements.useCurrentGpsButton.disabled = true;
+    }
+
+    setGpsStatusMessage("Getting current GPS location from phone...", false);
+
+    navigator.geolocation.getCurrentPosition(
+        function (position) {
+            const latitude = Number(position && position.coords ? position.coords.latitude : NaN);
+            const longitude = Number(position && position.coords ? position.coords.longitude : NaN);
+
+            if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+                setGpsStatusMessage("Phone GPS returned invalid coordinates.", true);
+            } else {
+                elements.gpsLatitude.value = latitude.toFixed(gpsCoordinateDecimalPlaces);
+                elements.gpsLongitude.value = longitude.toFixed(gpsCoordinateDecimalPlaces);
+
+                const accuracyMeters = Number(position.coords && position.coords.accuracy);
+                const accuracyText = Number.isFinite(accuracyMeters)
+                    ? " (accuracy +/- " + Math.round(accuracyMeters) + " m)"
+                    : "";
+
+                setGpsStatusMessage("GPS coordinates updated from phone location" + accuracyText + ".", false);
+            }
+
+            if (elements.useCurrentGpsButton) {
+                elements.useCurrentGpsButton.disabled = false;
+            }
+        },
+        function (error) {
+            setGpsStatusMessage(getGpsErrorMessage(error), true);
+
+            if (elements.useCurrentGpsButton) {
+                elements.useCurrentGpsButton.disabled = false;
+            }
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 15000,
+            maximumAge: 10000
+        }
+    );
+}
+
 function resetCurrentStp(shouldFocus) {
     releaseCurrentDraftPhotos();
     elements.strataList.innerHTML = "";
@@ -2263,6 +2354,7 @@ function resetCurrentStp(shouldFocus) {
     elements.stpEntryType.value = "base";
     elements.gpsLatitude.value = "";
     elements.gpsLongitude.value = "";
+    setGpsStatusMessage("", false);
 
     updateStpTypeUi();
     refreshParentStpOptions();
