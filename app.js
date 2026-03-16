@@ -3,6 +3,12 @@ const projectsStorageKey = "archaeolab-projects-v1";
 const maxProjectImageSizeBytes = 3 * 1024 * 1024;
 const supportedProjectImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const supportedProjectImageExtensions = [".jpg", ".jpeg", ".png", ".webp"];
+const photoDatabaseName = "archaeolab-stp-photos-v1";
+const photoDatabaseStore = "photos";
+const photoDatabaseVersion = 1;
+const draftPhotoBlobs = new Map();
+
+let photoDatabasePromise;
 
 const dropdownOptions = {
     munsell: [
@@ -441,10 +447,12 @@ function addStratumCard(defaults) {
         }
     });
 
-    if (defaults && Array.isArray(defaults.photoNames)) {
+    if (defaults && Array.isArray(defaults.photos)) {
+        setCardPhotoEntries(newCard, defaults.photos);
+    } else if (defaults && Array.isArray(defaults.photoNames)) {
         setCardPhotoNames(newCard, defaults.photoNames);
     } else {
-        setCardPhotoNames(newCard, []);
+        setCardPhotoEntries(newCard, []);
     }
 
     renumberStrata();
@@ -483,14 +491,16 @@ function handleStrataListClick(event) {
         }
 
         const removeIndex = Number(removePhotoButton.getAttribute("data-photo-remove"));
-        const names = getCardPhotoNames(card);
+        const entries = getCardPhotoEntries(card);
 
-        if (Number.isNaN(removeIndex) || removeIndex < 0 || removeIndex >= names.length) {
+        if (Number.isNaN(removeIndex) || removeIndex < 0 || removeIndex >= entries.length) {
             return;
         }
 
-        names.splice(removeIndex, 1);
-        setCardPhotoNames(card, names);
+        const removedEntries = entries.splice(removeIndex, 1);
+        removedEntries.forEach(releaseDraftPhotoEntry);
+
+        setCardPhotoEntries(card, entries);
         validatePhotoNamesForCard(card);
         renderPhotoListForCard(card);
         return;
@@ -513,6 +523,8 @@ function handleStrataListClick(event) {
         return;
     }
 
+    releaseCardDraftPhotos(card);
+
     card.remove();
     renumberStrata();
 }
@@ -532,14 +544,14 @@ function handleStrataListInput(event) {
         }
 
         const photoIndex = Number(field.getAttribute("data-photo-index"));
-        const names = getCardPhotoNames(card);
+        const entries = getCardPhotoEntries(card);
 
-        if (Number.isNaN(photoIndex) || photoIndex < 0 || photoIndex >= names.length) {
+        if (Number.isNaN(photoIndex) || photoIndex < 0 || photoIndex >= entries.length) {
             return;
         }
 
-        names[photoIndex] = field.value;
-        setCardPhotoNames(card, names);
+        entries[photoIndex].name = field.value;
+        setCardPhotoEntries(card, entries);
         validatePhotoNamesForCard(card);
 
         const warningElement = card.querySelector("[data-photo-warning]");
@@ -577,14 +589,14 @@ function handleStrataListChange(event) {
         }
 
         const photoIndex = Number(field.getAttribute("data-photo-index"));
-        const names = getCardPhotoNames(card);
+        const entries = getCardPhotoEntries(card);
 
-        if (Number.isNaN(photoIndex) || photoIndex < 0 || photoIndex >= names.length) {
+        if (Number.isNaN(photoIndex) || photoIndex < 0 || photoIndex >= entries.length) {
             return;
         }
 
-        names[photoIndex] = field.value.trim();
-        setCardPhotoNames(card, names);
+        entries[photoIndex].name = field.value.trim();
+        setCardPhotoEntries(card, entries);
         validatePhotoNamesForCard(card);
         renderPhotoListForCard(card);
         return;
@@ -612,14 +624,23 @@ function handleStrataListChange(event) {
         return;
     }
 
-    const existingNames = getCardPhotoNames(card);
+    const existingEntries = getCardPhotoEntries(card);
     const stratumLabelField = card.querySelector('[data-field="stratumLabel"]');
     const prefix = card.dataset.photoPrefix || buildPhotoPrefix(stratumLabelField ? stratumLabelField.value : "1");
-    const photoNames = selectedFiles.map(function (file, index) {
-        return buildAutoPhotoName(prefix, existingNames.length + index + 1, file.name);
+    const photoEntries = selectedFiles.map(function (file, index) {
+        const draftId = createPhotoDraftId();
+        draftPhotoBlobs.set(draftId, file);
+
+        return {
+            pendingId: draftId,
+            name: buildAutoPhotoName(prefix, existingEntries.length + index + 1, file.name),
+            type: file.type || "",
+            size: file.size || 0,
+            originalName: file.name || ""
+        };
     });
 
-    setCardPhotoNames(card, existingNames.concat(photoNames));
+    setCardPhotoEntries(card, existingEntries.concat(photoEntries));
     validatePhotoNamesForCard(card);
     renderPhotoListForCard(card);
     field.value = "";
@@ -694,13 +715,20 @@ function updatePhotoRuleForCard(card) {
     card.dataset.photoPrefix = prefix;
     photoRuleField.value = prefix + "_01.jpg";
 
-    const existingNames = getCardPhotoNames(card);
-    if (existingNames.length > 0 && previousPrefix && previousPrefix !== prefix) {
-        const renamedNames = existingNames.map(function (name, index) {
-            return buildAutoPhotoName(prefix, index + 1, name);
+    const existingEntries = getCardPhotoEntries(card);
+    if (existingEntries.length > 0 && previousPrefix && previousPrefix !== prefix) {
+        const renamedEntries = existingEntries.map(function (entry, index) {
+            return normalizePhotoEntry({
+                id: entry.id,
+                pendingId: entry.pendingId,
+                name: buildAutoPhotoName(prefix, index + 1, entry.name),
+                type: entry.type,
+                size: entry.size,
+                originalName: entry.originalName
+            });
         });
 
-        setCardPhotoNames(card, renamedNames);
+        setCardPhotoEntries(card, renamedEntries);
     }
 
     validatePhotoNamesForCard(card);
@@ -713,7 +741,135 @@ function refreshPhotoRulesAll() {
     });
 }
 
-function getCardPhotoNames(card) {
+function createPhotoDraftId() {
+    return "draft-" + String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+}
+
+function createPhotoRecordId() {
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        return window.crypto.randomUUID();
+    }
+
+    return "photo-" + String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+}
+
+function getPhotoDatabase() {
+    if (!("indexedDB" in window)) {
+        return Promise.reject(new Error("IndexedDB is not supported in this browser."));
+    }
+
+    if (!photoDatabasePromise) {
+        photoDatabasePromise = new Promise(function (resolve, reject) {
+            const request = window.indexedDB.open(photoDatabaseName, photoDatabaseVersion);
+
+            request.onupgradeneeded = function () {
+                const database = request.result;
+
+                if (!database.objectStoreNames.contains(photoDatabaseStore)) {
+                    database.createObjectStore(photoDatabaseStore, { keyPath: "id" });
+                }
+            };
+
+            request.onsuccess = function () {
+                resolve(request.result);
+            };
+
+            request.onerror = function () {
+                reject(request.error || new Error("Could not open photo storage."));
+            };
+        });
+    }
+
+    return photoDatabasePromise;
+}
+
+async function savePhotoBlobToDatabase(photoId, blobValue) {
+    const database = await getPhotoDatabase();
+
+    return new Promise(function (resolve, reject) {
+        const transaction = database.transaction(photoDatabaseStore, "readwrite");
+        const store = transaction.objectStore(photoDatabaseStore);
+
+        store.put({
+            id: photoId,
+            blob: blobValue,
+            savedAt: new Date().toISOString()
+        });
+
+        transaction.oncomplete = function () {
+            resolve();
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error || new Error("Could not save photo blob."));
+        };
+
+        transaction.onabort = function () {
+            reject(transaction.error || new Error("Photo save was aborted."));
+        };
+    });
+}
+
+async function deletePhotoBlobFromDatabase(photoId) {
+    if (!photoId || !("indexedDB" in window)) {
+        return;
+    }
+
+    const database = await getPhotoDatabase();
+
+    return new Promise(function (resolve, reject) {
+        const transaction = database.transaction(photoDatabaseStore, "readwrite");
+        const store = transaction.objectStore(photoDatabaseStore);
+
+        store.delete(photoId);
+
+        transaction.oncomplete = function () {
+            resolve();
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error || new Error("Could not delete photo blob."));
+        };
+
+        transaction.onabort = function () {
+            reject(transaction.error || new Error("Photo delete was aborted."));
+        };
+    });
+}
+
+async function deletePhotoBlobsFromDatabase(photoIds) {
+    const uniqueIds = Array.from(new Set((photoIds || []).filter(Boolean)));
+
+    for (const photoId of uniqueIds) {
+        await deletePhotoBlobFromDatabase(photoId);
+    }
+}
+
+function normalizePhotoEntry(entry) {
+    return {
+        id: entry && entry.id ? String(entry.id) : "",
+        pendingId: entry && entry.pendingId ? String(entry.pendingId) : "",
+        name: String(entry && entry.name != null ? entry.name : ""),
+        type: entry && entry.type ? String(entry.type) : "",
+        size: Number.isFinite(Number(entry && entry.size)) ? Number(entry.size) : 0,
+        originalName: entry && entry.originalName ? String(entry.originalName) : ""
+    };
+}
+
+function getCardPhotoEntries(card) {
+    const rawEntries = card.dataset.photoEntries;
+
+    if (rawEntries) {
+        try {
+            const parsed = JSON.parse(rawEntries);
+            if (Array.isArray(parsed)) {
+                return parsed.map(normalizePhotoEntry);
+            }
+        } catch (error) {
+            return [];
+        }
+    }
+
     const rawNames = card.dataset.photoNames;
 
     if (!rawNames) {
@@ -721,11 +877,34 @@ function getCardPhotoNames(card) {
     }
 
     try {
-        const parsed = JSON.parse(rawNames);
-        return Array.isArray(parsed) ? parsed : [];
+        const parsedNames = JSON.parse(rawNames);
+        if (!Array.isArray(parsedNames)) {
+            return [];
+        }
+
+        return parsedNames.map(function (name) {
+            return normalizePhotoEntry({ name: name });
+        });
     } catch (error) {
         return [];
     }
+}
+
+function setCardPhotoEntries(card, entries) {
+    const safeEntries = Array.isArray(entries)
+        ? entries.map(normalizePhotoEntry)
+        : [];
+
+    card.dataset.photoEntries = JSON.stringify(safeEntries);
+    card.dataset.photoNames = JSON.stringify(safeEntries.map(function (entry) {
+        return entry.name;
+    }));
+}
+
+function getCardPhotoNames(card) {
+    return getCardPhotoEntries(card).map(function (entry) {
+        return entry.name;
+    });
 }
 
 function setCardPhotoNames(card, names) {
@@ -735,7 +914,170 @@ function setCardPhotoNames(card, names) {
         })
         : [];
 
-    card.dataset.photoNames = JSON.stringify(safeNames);
+    const existingEntries = getCardPhotoEntries(card);
+    const nextEntries = safeNames.map(function (name, index) {
+        const existing = existingEntries[index] || {};
+
+        return normalizePhotoEntry({
+            id: existing.id || "",
+            pendingId: existing.pendingId || "",
+            name: name,
+            type: existing.type || "",
+            size: existing.size || 0,
+            originalName: existing.originalName || ""
+        });
+    });
+
+    setCardPhotoEntries(card, nextEntries);
+}
+
+function releaseDraftPhotoEntry(entry) {
+    if (!entry || !entry.pendingId) {
+        return;
+    }
+
+    draftPhotoBlobs.delete(entry.pendingId);
+}
+
+function releaseCardDraftPhotos(card) {
+    const entries = getCardPhotoEntries(card);
+    entries.forEach(releaseDraftPhotoEntry);
+}
+
+function releaseCurrentDraftPhotos() {
+    elements.strataList.querySelectorAll(".stratum-card").forEach(function (card) {
+        releaseCardDraftPhotos(card);
+    });
+}
+
+async function persistPhotoEntries(entries) {
+    const normalizedEntries = Array.isArray(entries)
+        ? entries.map(normalizePhotoEntry)
+        : [];
+
+    const pendingEntries = normalizedEntries.filter(function (entry) {
+        return Boolean(entry.pendingId);
+    });
+
+    if (pendingEntries.length > 0 && !("indexedDB" in window)) {
+        throw new Error("Photo storage is not available in this browser.");
+    }
+
+    const persistedEntries = [];
+
+    for (const entry of normalizedEntries) {
+        if (entry.pendingId) {
+            const blobValue = draftPhotoBlobs.get(entry.pendingId);
+
+            if (!blobValue) {
+                throw new Error("A selected photo could not be found in memory. Re-add the photo and try again.");
+            }
+
+            const photoId = createPhotoRecordId();
+            await savePhotoBlobToDatabase(photoId, blobValue);
+            draftPhotoBlobs.delete(entry.pendingId);
+
+            persistedEntries.push(normalizePhotoEntry({
+                id: photoId,
+                name: entry.name,
+                type: entry.type || blobValue.type || "",
+                size: entry.size || blobValue.size || 0,
+                originalName: entry.originalName || ""
+            }));
+
+            continue;
+        }
+
+        persistedEntries.push(normalizePhotoEntry({
+            id: entry.id,
+            name: entry.name,
+            type: entry.type,
+            size: entry.size,
+            originalName: entry.originalName
+        }));
+    }
+
+    return persistedEntries;
+}
+
+async function persistCardPhotoEntries(card) {
+    const entries = getCardPhotoEntries(card);
+    const persistedEntries = await persistPhotoEntries(entries);
+    setCardPhotoEntries(card, persistedEntries);
+    return persistedEntries;
+}
+
+function getStratumPhotoEntries(stratum) {
+    if (Array.isArray(stratum.photos)) {
+        return stratum.photos.map(normalizePhotoEntry);
+    }
+
+    if (Array.isArray(stratum.photoNames)) {
+        return stratum.photoNames.map(function (name) {
+            return normalizePhotoEntry({ name: name });
+        });
+    }
+
+    return [];
+}
+
+function getStratumPhotoNames(stratum) {
+    return getStratumPhotoEntries(stratum).map(function (entry) {
+        return entry.name;
+    }).filter(Boolean);
+}
+
+function collectPhotoIdsFromStps(stps) {
+    const photoIds = new Set();
+
+    (stps || []).forEach(function (stp) {
+        (stp.strata || []).forEach(function (stratum) {
+            getStratumPhotoEntries(stratum).forEach(function (entry) {
+                if (entry.id) {
+                    photoIds.add(entry.id);
+                }
+            });
+        });
+    });
+
+    return Array.from(photoIds);
+}
+
+function collectPhotoIdsFromProjects(projects) {
+    const photoIds = new Set();
+
+    (projects || []).forEach(function (project) {
+        collectPhotoIdsFromStps(project.stps || []).forEach(function (photoId) {
+            photoIds.add(photoId);
+        });
+    });
+
+    return Array.from(photoIds);
+}
+
+async function cleanupDeletedPhotoIds(candidatePhotoIds, projectsSnapshot) {
+    const candidates = Array.from(new Set((candidatePhotoIds || []).filter(Boolean)));
+
+    if (candidates.length === 0) {
+        return;
+    }
+
+    const keepIds = new Set();
+
+    collectPhotoIdsFromStps(state.stps).forEach(function (photoId) {
+        keepIds.add(photoId);
+    });
+
+    const projects = Array.isArray(projectsSnapshot) ? projectsSnapshot : loadProjectsStore();
+    collectPhotoIdsFromProjects(projects).forEach(function (photoId) {
+        keepIds.add(photoId);
+    });
+
+    const deletableIds = candidates.filter(function (photoId) {
+        return !keepIds.has(photoId);
+    });
+
+    await deletePhotoBlobsFromDatabase(deletableIds);
 }
 
 function setPhotoWarning(card, text) {
@@ -871,6 +1213,7 @@ function updateStpTypeUi() {
 }
 
 function resetCurrentStp(shouldFocus) {
+    releaseCurrentDraftPhotos();
     elements.strataList.innerHTML = "";
     addStratumCard();
 
@@ -895,7 +1238,7 @@ function resetCurrentStp(shouldFocus) {
     }
 }
 
-function saveCurrentStp() {
+async function saveCurrentStp() {
     updateSiteDraft();
 
     if (!elements.entryForm.reportValidity()) {
@@ -918,20 +1261,41 @@ function saveCurrentStp() {
         return;
     }
 
-    const currentStp = collectCurrentStp();
-    state.stps.push(currentStp);
-    saveSession();
-    refreshParentStpOptions();
-    renderSavedStps();
-    resetCurrentStp(true);
+    elements.saveStpButton.disabled = true;
+
+    try {
+        const currentStp = await collectCurrentStp();
+        state.stps.push(currentStp);
+        saveSession();
+        refreshParentStpOptions();
+        renderSavedStps();
+        resetCurrentStp(true);
+    } catch (error) {
+        console.warn("Could not save STP photos.", error);
+        alert("Photos could not be saved for this STP. " + (error && error.message ? error.message : "Try uploading the photos again."));
+    } finally {
+        elements.saveStpButton.disabled = false;
+    }
 }
 
-function collectCurrentStp() {
+async function collectCurrentStp() {
     const strata = [];
-    const cards = elements.strataList.querySelectorAll(".stratum-card");
+    const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
 
-    cards.forEach(function (card) {
-        const photoNames = getCardPhotoNames(card);
+    for (const card of cards) {
+        const persistedPhotoEntries = await persistCardPhotoEntries(card);
+        const photoNames = persistedPhotoEntries.map(function (entry) {
+            return entry.name;
+        }).filter(Boolean);
+
+        const savedPhotos = persistedPhotoEntries.map(function (entry) {
+            return {
+                id: entry.id,
+                name: entry.name,
+                type: entry.type,
+                size: entry.size
+            };
+        });
 
         strata.push({
             stratumLabel: card.querySelector('[data-field="stratumLabel"]').value,
@@ -942,9 +1306,10 @@ function collectCurrentStp() {
             artifactCatalog: card.querySelector('[data-field="artifactCatalog"]').value.trim(),
             artifactSummary: card.querySelector('[data-field="artifactSummary"]').value.trim(),
             notes: card.querySelector('[data-field="notes"]').value.trim(),
-            photoNames: photoNames
+            photoNames: photoNames,
+            photos: savedPhotos
         });
-    });
+    }
 
     strata.sort(function (a, b) {
         return Number(a.stratumLabel) - Number(b.stratumLabel);
@@ -1022,7 +1387,7 @@ function renderSavedStps() {
         stp.strata.forEach(function (stratum) {
             const row = document.createElement("tr");
 
-            const photoText = Array.isArray(stratum.photoNames) ? stratum.photoNames.join("; ") : "";
+            const photoText = getStratumPhotoNames(stratum).join("; ");
 
             [
                 stratum.stratumLabel,
@@ -1185,7 +1550,7 @@ function buildFlatExportRows() {
         const stpParts = parseStpLabel(exportStp);
 
         stp.strata.forEach(function (stratum) {
-            const photoNames = Array.isArray(stratum.photoNames) ? stratum.photoNames.join("; ") : "";
+            const photoNames = getStratumPhotoNames(stratum).join("; ");
 
             rows.push({
                 "Sup": stp.supDirection || "",
@@ -1335,10 +1700,12 @@ function downloadSessionData() {
     URL.revokeObjectURL(downloadUrl);
 }
 
-function clearSession() {
+async function clearSession() {
     if (!confirm("Clear the saved STP session and start over?")) {
         return;
     }
+
+    const removedPhotoIds = collectPhotoIdsFromStps(state.stps);
 
     state.siteName = "";
     state.siteLocation = "";
@@ -1354,6 +1721,12 @@ function clearSession() {
     setProjectImageMessage("", false);
     elements.projectImageInput.value = "";
     resetCurrentStp(true);
+
+    try {
+        await cleanupDeletedPhotoIds(removedPhotoIds);
+    } catch (error) {
+        console.warn("Could not remove deleted session photos.", error);
+    }
 }
 
 function loadProjectsStore() {
@@ -1427,10 +1800,12 @@ function saveProjectAndStartNew() {
     resetCurrentStp(true);
 }
 
-function loadProject(projectId) {
+async function loadProject(projectId) {
     if (!confirm("Loading this project will replace the current session. Continue?")) {
         return;
     }
+
+    const previousSessionPhotoIds = collectPhotoIdsFromStps(state.stps);
 
     const projects = loadProjectsStore();
     const project = projects.find(function (p) {
@@ -1459,14 +1834,25 @@ function loadProject(projectId) {
     setProjectImageMessage("", false);
     elements.projectImageInput.value = "";
     resetCurrentStp(false);
+
+    try {
+        await cleanupDeletedPhotoIds(previousSessionPhotoIds, projects);
+    } catch (error) {
+        console.warn("Could not clean up replaced session photos.", error);
+    }
 }
 
-function deleteProject(projectId) {
+async function deleteProject(projectId) {
     if (!confirm("Delete this saved project? This cannot be undone.")) {
         return;
     }
 
-    const projects = loadProjectsStore().filter(function (p) {
+    const existingProjects = loadProjectsStore();
+    const removedProject = existingProjects.find(function (project) {
+        return project.id === projectId;
+    });
+
+    const projects = existingProjects.filter(function (p) {
         return p.id !== projectId;
     });
 
@@ -1475,6 +1861,14 @@ function deleteProject(projectId) {
     }
 
     renderProjects();
+
+    const removedPhotoIds = removedProject ? collectPhotoIdsFromStps(removedProject.stps || []) : [];
+
+    try {
+        await cleanupDeletedPhotoIds(removedPhotoIds, projects);
+    } catch (error) {
+        console.warn("Could not clean up deleted project photos.", error);
+    }
 }
 
 function renderProjects() {
