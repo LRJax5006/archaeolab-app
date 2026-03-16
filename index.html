@@ -185,7 +185,10 @@
                                     </label>
                                 </div>
                                 <div class="gps-actions">
-                                    <button type="button" id="useCurrentGpsButton" class="secondary-button">Use Phone GPS</button>
+                                    <div class="gps-actions-buttons">
+                                        <button type="button" id="useCurrentGpsButton" class="secondary-button">Use Phone GPS</button>
+                                        <button type="button" id="viewGpsMapButton" class="ghost-button">View GPS Points Map</button>
+                                    </div>
                                     <p id="gpsStatusMessage" class="gps-status" aria-live="polite"></p>
                                 </div>
                             </div>
@@ -269,7 +272,7 @@
                     <div class="section-actions">
                         <button type="button" id="exportXlsxButton" class="secondary-button">Download Excel-ready XLSX</button>
                         <button type="button" id="exportCsvButton" class="ghost-button">Download CSV Backup</button>
-                        <button type="button" id="viewGpsMapButton" class="ghost-button">View GPS Points Map</button>
+                        <button type="button" id="importCsvButton" class="ghost-button">Import CSV Backup</button>
                         <button type="button" id="exportJsonButton" class="ghost-button">Download JSON Backup</button>
                         <button type="button" id="importJsonButton" class="ghost-button">Import JSON Backup</button>
                     </div>
@@ -305,6 +308,7 @@
                     </div>
                 </div>
                 <p id="savedStpFilterSummary" class="filter-summary" aria-live="polite"></p>
+                <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden>
                 <input type="file" id="importJsonInput" accept=".json,application/json" hidden>
 
                 <div id="savedEmptyState" class="empty-state">No STPs saved yet.</div>

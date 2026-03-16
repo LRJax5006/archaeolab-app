@@ -433,9 +433,15 @@ h1 {
     gap: 6px;
 }
 
-.gps-actions .secondary-button {
+.gps-actions-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.gps-actions .secondary-button,
+.gps-actions .ghost-button {
     width: auto;
-    justify-self: start;
 }
 
 .gps-status {

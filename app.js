@@ -440,6 +440,8 @@ function cacheElements() {
     elements.exportXlsxButton = document.getElementById("exportXlsxButton");
     elements.exportCsvButton = document.getElementById("exportCsvButton");
     elements.viewGpsMapButton = document.getElementById("viewGpsMapButton");
+    elements.importCsvButton = document.getElementById("importCsvButton");
+    elements.importCsvInput = document.getElementById("importCsvInput");
     elements.exportJsonButton = document.getElementById("exportJsonButton");
     elements.importJsonButton = document.getElementById("importJsonButton");
     elements.importJsonInput = document.getElementById("importJsonInput");
@@ -499,6 +501,10 @@ function bindEvents() {
     elements.exportCsvButton.addEventListener("click", downloadExcelReadyCsv);
     if (elements.viewGpsMapButton) {
         elements.viewGpsMapButton.addEventListener("click", openGpsPointsMap);
+    }
+    if (elements.importCsvButton && elements.importCsvInput) {
+        elements.importCsvButton.addEventListener("click", requestImportCsvFile);
+        elements.importCsvInput.addEventListener("change", handleImportCsvFile);
     }
     elements.exportJsonButton.addEventListener("click", downloadSessionData);
     elements.importJsonButton.addEventListener("click", requestImportSessionFile);
@@ -3518,6 +3524,363 @@ function downloadSessionData() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(downloadUrl);
+}
+
+function requestImportCsvFile() {
+    if (!elements.importCsvInput) {
+        return;
+    }
+
+    elements.importCsvInput.value = "";
+    elements.importCsvInput.click();
+}
+
+function parseCsvTextRows(rawText) {
+    const rows = [];
+    const text = String(rawText || "");
+    let currentRow = [];
+    let currentValue = "";
+    let inQuotes = false;
+
+    for (let index = 0; index < text.length; index += 1) {
+        const character = text[index];
+
+        if (character === '"') {
+            const nextCharacter = text[index + 1];
+
+            if (inQuotes && nextCharacter === '"') {
+                currentValue += '"';
+                index += 1;
+            } else {
+                inQuotes = !inQuotes;
+            }
+
+            continue;
+        }
+
+        if (character === "," && !inQuotes) {
+            currentRow.push(currentValue);
+            currentValue = "";
+            continue;
+        }
+
+        if ((character === "\n" || character === "\r") && !inQuotes) {
+            if (character === "\r" && text[index + 1] === "\n") {
+                index += 1;
+            }
+
+            currentRow.push(currentValue);
+            rows.push(currentRow);
+            currentRow = [];
+            currentValue = "";
+            continue;
+        }
+
+        currentValue += character;
+    }
+
+    if (currentValue || currentRow.length > 0) {
+        currentRow.push(currentValue);
+        rows.push(currentRow);
+    }
+
+    return rows.filter(function (row) {
+        return row.some(function (cellValue) {
+            return normalizeTextValue(cellValue) !== "";
+        });
+    });
+}
+
+function parseCsvObjectsFallback(rawText) {
+    const parsedRows = parseCsvTextRows(rawText);
+
+    if (parsedRows.length < 2) {
+        return [];
+    }
+
+    const headers = parsedRows[0].map(function (headerValue, index) {
+        const normalizedHeader = String(headerValue == null ? "" : headerValue)
+            .replace(/^\uFEFF/, "")
+            .trim();
+
+        return normalizedHeader || ("Column " + String(index + 1));
+    });
+
+    return parsedRows.slice(1).map(function (rowValues) {
+        const row = {};
+
+        headers.forEach(function (header, columnIndex) {
+            row[header] = columnIndex < rowValues.length ? rowValues[columnIndex] : "";
+        });
+
+        return row;
+    }).filter(function (row) {
+        return Object.keys(row).some(function (header) {
+            return normalizeTextValue(row[header]) !== "";
+        });
+    });
+}
+
+function parseCsvBackupRows(rawText) {
+    const text = String(rawText || "");
+
+    if (!normalizeTextValue(text)) {
+        return [];
+    }
+
+    if (typeof XLSX !== "undefined") {
+        try {
+            const workbook = XLSX.read(text, { type: "string" });
+            const firstSheetName = workbook.SheetNames[0];
+
+            if (firstSheetName) {
+                const worksheet = workbook.Sheets[firstSheetName];
+                const parsedRows = XLSX.utils.sheet_to_json(worksheet, {
+                    defval: "",
+                    raw: false
+                });
+
+                if (Array.isArray(parsedRows) && parsedRows.length > 0) {
+                    return parsedRows;
+                }
+            }
+        } catch (error) {
+            console.warn("Could not parse CSV with XLSX. Falling back to manual parser.", error);
+        }
+    }
+
+    return parseCsvObjectsFallback(text);
+}
+
+function getCsvRowValue(row, candidateHeaders) {
+    const source = row && typeof row === "object" ? row : {};
+
+    for (const header of candidateHeaders) {
+        if (!Object.prototype.hasOwnProperty.call(source, header)) {
+            continue;
+        }
+
+        const value = normalizeTextValue(source[header]);
+
+        if (value) {
+            return value;
+        }
+    }
+
+    return "";
+}
+
+function splitCsvPhotoNames(value) {
+    const rawValue = normalizeTextValue(value);
+
+    if (!rawValue) {
+        return [];
+    }
+
+    return rawValue.split(";").map(function (name) {
+        return normalizeTextValue(name);
+    }).filter(Boolean);
+}
+
+function buildSessionFromCsvRows(csvRows) {
+    const rows = Array.isArray(csvRows) ? csvRows : [];
+    const stpMap = new Map();
+    let sessionSiteName = "";
+    let sessionSiteLocation = "";
+    let sessionDepthUnit = "metric";
+
+    rows.forEach(function (row, rowIndex) {
+        const siteName = getCsvRowValue(row, ["Site Name", "Site"]);
+        const siteLocation = getCsvRowValue(row, ["Site Location", "Location"]);
+        const depthUnitToken = getCsvRowValue(row, ["Depth Unit"]);
+        const depthUnit = normalizeDepthUnitValue(depthUnitToken || sessionDepthUnit);
+        const entryType = normalizeEntryTypeValue(getCsvRowValue(row, ["STP Entry Type", "Entry Type"]) || "base");
+        const parentStp = entryType === "supplemental"
+            ? getCsvRowValue(row, ["Parent STP"])
+            : "";
+        const supDirection = entryType === "supplemental"
+            ? normalizeSupDirectionValue(getCsvRowValue(row, ["Sup", "Supplemental Direction"]))
+            : "";
+        const stpLabel = getCsvRowValue(row, ["Recorded STP Label", "STP", "Unit"]);
+
+        if (!stpLabel) {
+            return;
+        }
+
+        const gpsLatitude = getCsvRowValue(row, ["GPS Latitude", "Latitude"]);
+        const gpsLongitude = getCsvRowValue(row, ["GPS Longitude", "Longitude"]);
+
+        if (!sessionSiteName && siteName) {
+            sessionSiteName = siteName;
+        }
+
+        if (!sessionSiteLocation && siteLocation) {
+            sessionSiteLocation = siteLocation;
+        }
+
+        if (depthUnitToken) {
+            sessionDepthUnit = depthUnit;
+        }
+
+        const resolvedSiteName = siteName || sessionSiteName;
+        const resolvedSiteLocation = siteLocation || sessionSiteLocation;
+
+        const stpKey = [
+            resolvedSiteName,
+            resolvedSiteLocation,
+            depthUnit,
+            entryType,
+            parentStp,
+            supDirection,
+            stpLabel,
+            gpsLatitude,
+            gpsLongitude
+        ].join("||");
+
+        if (!stpMap.has(stpKey)) {
+            stpMap.set(stpKey, {
+                siteName: resolvedSiteName,
+                siteLocation: resolvedSiteLocation,
+                depthUnit: depthUnit,
+                stpLabel: stpLabel,
+                entryType: entryType,
+                parentStp: parentStp,
+                supDirection: supDirection,
+                gpsLatitude: gpsLatitude,
+                gpsLongitude: gpsLongitude,
+                savedAt: new Date(Date.now() + rowIndex).toISOString(),
+                strata: []
+            });
+        }
+
+        const targetStp = stpMap.get(stpKey);
+        const stratumLabel = getCsvRowValue(row, ["Stratum", "Stratum Label"]) || String(targetStp.strata.length + 1);
+
+        targetStp.strata.push(normalizeImportedStratum({
+            stratumLabel: stratumLabel,
+            depth: getCsvRowValue(row, ["Depth"]),
+            munsell: getCsvRowValue(row, ["Munsell"]),
+            soilType: getCsvRowValue(row, ["Texture", "Soil Type"]),
+            horizon: getCsvRowValue(row, ["Horizon"]),
+            artifactCatalog: getCsvRowValue(row, ["Artifact Catalog"]),
+            artifactSummary: getCsvRowValue(row, ["Artifact Summary"]),
+            notes: getCsvRowValue(row, ["Notes/Inclusions", "Notes"]),
+            photoNames: splitCsvPhotoNames(getCsvRowValue(row, ["Photo Names"])),
+            photos: []
+        }));
+    });
+
+    const importedStps = Array.from(stpMap.values()).map(function (stp) {
+        stp.strata.sort(function (a, b) {
+            const aNumber = Number(a.stratumLabel);
+            const bNumber = Number(b.stratumLabel);
+
+            if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) {
+                return aNumber - bNumber;
+            }
+
+            return normalizeTextValue(a.stratumLabel).localeCompare(
+                normalizeTextValue(b.stratumLabel),
+                undefined,
+                {
+                    numeric: true,
+                    sensitivity: "base"
+                }
+            );
+        });
+
+        return stp;
+    });
+
+    if (importedStps.length === 0) {
+        return null;
+    }
+
+    return normalizeImportedSession({
+        siteName: sessionSiteName || importedStps[0].siteName,
+        siteLocation: sessionSiteLocation || importedStps[0].siteLocation,
+        depthUnit: sessionDepthUnit || "metric",
+        stps: importedStps,
+        projectImage: "",
+        referencePhoto: ""
+    });
+}
+
+function handleImportCsvFile() {
+    if (!elements.importCsvInput) {
+        return;
+    }
+
+    const file = elements.importCsvInput.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    const reader = new FileReader();
+
+    reader.addEventListener("load", async function () {
+        try {
+            const rawText = String(reader.result || "");
+            const csvRows = parseCsvBackupRows(rawText);
+            const importedSession = buildSessionFromCsvRows(csvRows);
+
+            if (!importedSession || importedSession.stps.length === 0) {
+                throw new Error("No valid STP records were found in CSV backup.");
+            }
+
+            if (!confirm("Import this CSV backup and replace the current session?")) {
+                return;
+            }
+
+            const removedPhotoIds = collectPhotoIdsFromStps(state.stps);
+
+            state.siteName = importedSession.siteName;
+            state.siteLocation = importedSession.siteLocation;
+            state.depthUnit = importedSession.depthUnit;
+            state.stps = importedSession.stps;
+            state.projectImage = importedSession.projectImage;
+            state.referencePhoto = importedSession.referencePhoto;
+
+            if (!saveSession()) {
+                const importWarning = getDataSafetyAlertMessage("CSV backup loaded.");
+                if (importWarning) {
+                    alert(importWarning);
+                }
+
+                if (!dataSafetyState.lastCoreBackupSaveOk) {
+                    return;
+                }
+            }
+
+            populateSiteFields();
+            refreshParentStpOptions();
+            renderSavedStps();
+            renderProjectBanner();
+            renderReferencePhoto();
+            resetCurrentStp(false);
+            setProjectImageMessage("Imported CSV backup: " + file.name, false);
+            setReferencePhotoMessage("", false);
+
+            try {
+                await cleanupDeletedPhotoIds(removedPhotoIds);
+            } catch (cleanupError) {
+                console.warn("Could not clean up replaced session photos.", cleanupError);
+            }
+        } catch (error) {
+            console.warn("Could not import CSV backup.", error);
+            alert("Could not import CSV backup. Confirm the file matches the Archaeolab CSV export format.");
+        } finally {
+            elements.importCsvInput.value = "";
+        }
+    });
+
+    reader.addEventListener("error", function () {
+        elements.importCsvInput.value = "";
+        alert("The selected CSV file could not be read.");
+    });
+
+    reader.readAsText(file);
 }
 
 function requestImportSessionFile() {
