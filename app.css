@@ -480,6 +480,11 @@ h1 {
     padding: 16px;
 }
 
+.saved-stp {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .stratum-card-head,
 .saved-stp-head {
     display: flex;
@@ -593,6 +598,8 @@ button:hover {
 .saved-strata {
     width: 100%;
     border-collapse: collapse;
+    table-layout: fixed;
+    min-width: 860px;
 }
 
 .saved-strata th,
@@ -601,6 +608,8 @@ button:hover {
     border-bottom: 1px solid var(--line);
     text-align: left;
     vertical-align: top;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .saved-strata th {
@@ -669,10 +678,12 @@ button:hover {
 .saved-photo-links {
     display: grid;
     gap: 6px;
+    min-width: 0;
 }
 
 .saved-photo-open-button {
     width: auto;
+    max-width: 100%;
     justify-self: start;
     border: 2px solid rgba(0, 0, 0, 0.42);
     background: rgba(255, 255, 255, 0.9);
@@ -682,6 +693,9 @@ button:hover {
     font-weight: 700;
     font-size: 0.84rem;
     text-align: left;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     cursor: pointer;
 }
 
@@ -1172,6 +1186,10 @@ body.high-contrast .map-viewer-img {
 
     .saved-photo-open-button {
         width: auto;
+    }
+
+    .saved-strata {
+        min-width: 740px;
     }
 }
 
