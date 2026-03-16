@@ -3,10 +3,13 @@ const projectsStorageKey = "archaeolab-projects-v1";
 const filterStorageKey = "archaeolab-ui-filters-v1";
 const contrastModeStorageKey = "archaeolab-contrast-mode-v1";
 const importQualityModeStorageKey = "archaeolab-import-quality-mode-v1";
+const coreDataBackupStorageKey = "archaeolab-stp-core-backup-v1";
 const maxProjectImageSizeBytes = 4 * 1024 * 1024;
 const maxReferencePhotoSizeBytes = 4 * 1024 * 1024;
 const maxImageSourceSizeBytes = 20 * 1024 * 1024;
+const approximateLocalStorageQuotaBytes = 5 * 1024 * 1024;
 const defaultReferencePhotoSrc = "IMG_3376.JPG";
+const persistStratumPhotoBlobsInBrowser = false;
 const importQualityProfiles = {
     balanced: {
         maxDimension: 2600,
@@ -44,6 +47,11 @@ const draftPhotoBlobs = new Map();
 
 let photoDatabasePromise;
 let importQualityMode = "sharp";
+const dataSafetyState = {
+    loadedFromCoreBackup: false,
+    lastFullSessionSaveOk: true,
+    lastCoreBackupSaveOk: true
+};
 
 const dropdownOptions = {
     munsell: [
@@ -310,6 +318,8 @@ function initializeApp() {
     renderProjectBanner();
     renderReferencePhoto();
     resetCurrentStp(false);
+    updateImageStorageStatus();
+    updateDataSafetyStatus();
 }
 
 function cacheElements() {
@@ -339,6 +349,8 @@ function cacheElements() {
     elements.clearSessionButton = document.getElementById("clearSessionButton");
     elements.highContrastToggle = document.getElementById("highContrastToggle");
     elements.importQualityToggle = document.getElementById("importQualityToggle");
+    elements.dataSafetyStatus = document.getElementById("dataSafetyStatus");
+    elements.imageStorageStatus = document.getElementById("imageStorageStatus");
     elements.suggestLabelButton = document.getElementById("suggestLabelButton");
     elements.saveProjectButton = document.getElementById("saveProjectButton");
     elements.projectsEmptyState = document.getElementById("projectsEmptyState");
@@ -1030,36 +1042,190 @@ function getEntryTypeLabel(entryType) {
     return "Base STP";
 }
 
-function loadSession() {
-    const rawSession = localStorage.getItem(storageKey);
+function applyNormalizedSessionToState(normalizedSession) {
+    state.siteName = normalizedSession.siteName;
+    state.siteLocation = normalizedSession.siteLocation;
+    state.depthUnit = normalizedSession.depthUnit;
+    state.stps = normalizedSession.stps;
+    state.projectImage = normalizedSession.projectImage;
+    state.referencePhoto = normalizedSession.referencePhoto;
+}
 
-    if (!rawSession) {
-        return;
-    }
+function buildCoreDataBackupPayloadFromState(sourceState) {
+    const safeStps = (Array.isArray(sourceState.stps) ? sourceState.stps : []).map(function (stp) {
+        const strata = (Array.isArray(stp && stp.strata) ? stp.strata : []).map(function (stratum) {
+            const photoNames = Array.isArray(stratum && stratum.photoNames)
+                ? stratum.photoNames.map(normalizeTextValue).filter(Boolean)
+                : [];
 
+            return {
+                stratumLabel: normalizeTextValue(stratum && stratum.stratumLabel),
+                depth: normalizeTextValue(stratum && stratum.depth),
+                munsell: normalizeTextValue(stratum && stratum.munsell),
+                soilType: normalizeTextValue(stratum && stratum.soilType),
+                horizon: normalizeTextValue(stratum && stratum.horizon),
+                artifactCatalog: normalizeTextValue(stratum && stratum.artifactCatalog),
+                artifactSummary: normalizeTextValue(stratum && stratum.artifactSummary),
+                notes: normalizeTextValue(stratum && stratum.notes),
+                photoNames: photoNames,
+                photos: []
+            };
+        });
+
+        return {
+            siteName: normalizeTextValue(stp && stp.siteName),
+            siteLocation: normalizeTextValue(stp && stp.siteLocation),
+            depthUnit: normalizeDepthUnitValue(stp && stp.depthUnit),
+            stpLabel: normalizeTextValue(stp && stp.stpLabel),
+            entryType: normalizeEntryTypeValue(stp && stp.entryType),
+            parentStp: normalizeTextValue(stp && stp.parentStp),
+            supDirection: normalizeSupDirectionValue(stp && stp.supDirection),
+            gpsLatitude: normalizeTextValue(stp && stp.gpsLatitude),
+            gpsLongitude: normalizeTextValue(stp && stp.gpsLongitude),
+            savedAt: normalizeTextValue(stp && stp.savedAt) || new Date().toISOString(),
+            strata: strata
+        };
+    });
+
+    return {
+        siteName: normalizeTextValue(sourceState.siteName),
+        siteLocation: normalizeTextValue(sourceState.siteLocation),
+        depthUnit: normalizeDepthUnitValue(sourceState.depthUnit),
+        stps: safeStps,
+        projectImage: "",
+        referencePhoto: "",
+        backupSavedAt: new Date().toISOString(),
+        backupMode: "core-data-only"
+    };
+}
+
+function saveCoreDataBackup() {
     try {
-        const savedSession = JSON.parse(rawSession);
-        const normalizedSession = normalizeImportedSession(savedSession);
-
-        state.siteName = normalizedSession.siteName;
-        state.siteLocation = normalizedSession.siteLocation;
-        state.depthUnit = normalizedSession.depthUnit;
-        state.stps = normalizedSession.stps;
-        state.projectImage = normalizedSession.projectImage;
-        state.referencePhoto = normalizedSession.referencePhoto;
+        const coreBackupPayload = buildCoreDataBackupPayloadFromState(state);
+        localStorage.setItem(coreDataBackupStorageKey, JSON.stringify(coreBackupPayload));
+        return true;
     } catch (error) {
-        console.warn("Could not load saved session.", error);
+        console.warn("Could not save core data backup.", error);
+        return false;
     }
 }
 
+function loadCoreDataBackup() {
+    const rawBackup = localStorage.getItem(coreDataBackupStorageKey);
+
+    if (!rawBackup) {
+        return null;
+    }
+
+    try {
+        return normalizeImportedSession(JSON.parse(rawBackup));
+    } catch (error) {
+        console.warn("Could not load core data backup.", error);
+        return null;
+    }
+}
+
+function getDataSafetyAlertMessage(contextText) {
+    const prefix = contextText ? contextText + " " : "";
+
+    if (!dataSafetyState.lastFullSessionSaveOk && dataSafetyState.lastCoreBackupSaveOk) {
+        return prefix + "Browser storage is full for complete session saves. Core field data backup is protected, but large images may not persist. Download a JSON backup now.";
+    }
+
+    if (!dataSafetyState.lastCoreBackupSaveOk) {
+        return prefix + "Critical: browser storage could not save session or core backup. Download a JSON backup immediately to avoid data loss.";
+    }
+
+    return "";
+}
+
+function updateDataSafetyStatus() {
+    if (!elements.dataSafetyStatus) {
+        return;
+    }
+
+    let statusText = "Data safety: Session and core backup saved.";
+    let isWarning = false;
+
+    if (!dataSafetyState.lastCoreBackupSaveOk) {
+        statusText = "Data safety warning: Session and core backup could not be saved. Export JSON immediately.";
+        isWarning = true;
+    } else if (dataSafetyState.loadedFromCoreBackup) {
+        statusText = "Data safety warning: Session recovered from core backup. Re-upload map/reference images if needed.";
+        isWarning = true;
+    } else if (!dataSafetyState.lastFullSessionSaveOk) {
+        statusText = "Data safety warning: Core backup saved, but full session storage is full. Large images may not persist.";
+        isWarning = true;
+    }
+
+    elements.dataSafetyStatus.textContent = statusText;
+    elements.dataSafetyStatus.classList.toggle("is-warning", isWarning);
+}
+
+function loadSession() {
+    const rawSession = localStorage.getItem(storageKey);
+    let loadedFromPrimary = false;
+    let loadedFromBackup = false;
+    let primaryLoadFailed = false;
+
+    if (rawSession) {
+        try {
+            const savedSession = JSON.parse(rawSession);
+            applyNormalizedSessionToState(normalizeImportedSession(savedSession));
+            loadedFromPrimary = true;
+        } catch (error) {
+            primaryLoadFailed = true;
+            console.warn("Could not load saved session.", error);
+        }
+    }
+
+    if (!loadedFromPrimary) {
+        const backupSession = loadCoreDataBackup();
+        if (backupSession) {
+            applyNormalizedSessionToState(backupSession);
+            loadedFromBackup = true;
+        }
+    }
+
+    dataSafetyState.loadedFromCoreBackup = loadedFromBackup;
+    if (loadedFromBackup) {
+        dataSafetyState.lastFullSessionSaveOk = false;
+        dataSafetyState.lastCoreBackupSaveOk = true;
+        setProjectImageMessage("Recovered core backup. Re-add map image if needed.", false);
+        setReferencePhotoMessage("Recovered core backup. Re-add reference photo if needed.", false);
+    } else if (primaryLoadFailed) {
+        dataSafetyState.lastFullSessionSaveOk = false;
+        dataSafetyState.lastCoreBackupSaveOk = false;
+    } else {
+        dataSafetyState.lastFullSessionSaveOk = true;
+        dataSafetyState.lastCoreBackupSaveOk = true;
+    }
+
+    updateImageStorageStatus();
+    updateDataSafetyStatus();
+}
+
 function saveSession() {
+    let fullSaveOk = false;
+
     try {
         localStorage.setItem(storageKey, JSON.stringify(state));
-        return true;
+        fullSaveOk = true;
     } catch (error) {
         console.warn("Could not save session.", error);
-        return false;
     }
+
+    const coreBackupOk = saveCoreDataBackup();
+    dataSafetyState.lastFullSessionSaveOk = fullSaveOk;
+    dataSafetyState.lastCoreBackupSaveOk = coreBackupOk || fullSaveOk;
+
+    if (fullSaveOk) {
+        dataSafetyState.loadedFromCoreBackup = false;
+    }
+
+    updateImageStorageStatus();
+    updateDataSafetyStatus();
+    return fullSaveOk;
 }
 
 function populateSiteFields() {
@@ -1314,17 +1480,24 @@ function handleStrataListChange(event) {
     const existingEntries = getCardPhotoEntries(card);
     const stratumLabelField = card.querySelector('[data-field="stratumLabel"]');
     const prefix = card.dataset.photoPrefix || buildPhotoPrefix(stratumLabelField ? stratumLabelField.value : "1");
+    const shouldStoreBlobs = shouldPersistStratumPhotoBlobs();
     const photoEntries = selectedFiles.map(function (file, index) {
-        const draftId = createPhotoDraftId();
-        draftPhotoBlobs.set(draftId, file);
-
-        return {
-            pendingId: draftId,
+        const nextEntry = {
+            pendingId: "",
+            id: "",
             name: buildAutoPhotoName(prefix, existingEntries.length + index + 1, file.name),
             type: file.type || "",
             size: file.size || 0,
             originalName: file.name || ""
         };
+
+        if (shouldStoreBlobs) {
+            const draftId = createPhotoDraftId();
+            draftPhotoBlobs.set(draftId, file);
+            nextEntry.pendingId = draftId;
+        }
+
+        return nextEntry;
     });
 
     setCardPhotoEntries(card, existingEntries.concat(photoEntries));
@@ -1504,6 +1677,10 @@ function createPhotoRecordId() {
     }
 
     return "photo-" + String(Date.now()) + "-" + Math.random().toString(16).slice(2);
+}
+
+function shouldPersistStratumPhotoBlobs() {
+    return persistStratumPhotoBlobsInBrowser;
 }
 
 function getPhotoDatabase() {
@@ -1708,11 +1885,12 @@ async function persistPhotoEntries(entries) {
         ? entries.map(normalizePhotoEntry)
         : [];
 
+    const shouldStoreBlobs = shouldPersistStratumPhotoBlobs();
     const pendingEntries = normalizedEntries.filter(function (entry) {
         return Boolean(entry.pendingId);
     });
 
-    if (pendingEntries.length > 0 && !("indexedDB" in window)) {
+    if (pendingEntries.length > 0 && shouldStoreBlobs && !("indexedDB" in window)) {
         throw new Error("Photo storage is not available in this browser.");
     }
 
@@ -1720,6 +1898,20 @@ async function persistPhotoEntries(entries) {
 
     for (const entry of normalizedEntries) {
         if (entry.pendingId) {
+            if (!shouldStoreBlobs) {
+                releaseDraftPhotoEntry(entry);
+
+                persistedEntries.push(normalizePhotoEntry({
+                    id: "",
+                    name: entry.name,
+                    type: entry.type,
+                    size: entry.size,
+                    originalName: entry.originalName
+                }));
+
+                continue;
+            }
+
             const blobValue = draftPhotoBlobs.get(entry.pendingId);
 
             if (!blobValue) {
@@ -2041,13 +2233,39 @@ async function saveCurrentStp() {
     try {
         const currentStp = await collectCurrentStp();
         state.stps.push(currentStp);
-        saveSession();
+        const fullSessionSaved = saveSession();
+        if (!fullSessionSaved) {
+            const saveWarning = getDataSafetyAlertMessage("STP saved.");
+            if (saveWarning) {
+                alert(saveWarning);
+            }
+        }
         refreshParentStpOptions();
         renderSavedStps();
         resetCurrentStp(true);
     } catch (error) {
         console.warn("Could not save STP photos.", error);
-        alert("Photos could not be saved for this STP. " + (error && error.message ? error.message : "Try uploading the photos again."));
+
+        if (!confirm("Photos could not be saved for this STP. Save STP data without photos?")) {
+            alert("Photos were not saved. Re-upload photos and try again.");
+            return;
+        }
+
+        const fallbackStp = collectCurrentStpWithoutPhotoPersistence();
+        state.stps.push(fallbackStp);
+        const fullSessionSaved = saveSession();
+
+        if (!fullSessionSaved) {
+            const saveWarning = getDataSafetyAlertMessage("STP core data saved without photos.");
+            if (saveWarning) {
+                alert(saveWarning);
+            }
+        }
+
+        refreshParentStpOptions();
+        renderSavedStps();
+        resetCurrentStp(true);
+        alert("STP data saved without photos. Re-add photos later if needed.");
     } finally {
         elements.saveStpButton.disabled = false;
     }
@@ -2085,6 +2303,48 @@ async function collectCurrentStp() {
             photos: savedPhotos
         });
     }
+
+    strata.sort(function (a, b) {
+        return Number(a.stratumLabel) - Number(b.stratumLabel);
+    });
+
+    return {
+        siteName: state.siteName,
+        siteLocation: state.siteLocation,
+        depthUnit: state.depthUnit,
+        stpLabel: elements.stpLabel.value.trim(),
+        entryType: elements.stpEntryType.value,
+        parentStp: elements.parentStp.value,
+        supDirection: elements.supDirection.value,
+        gpsLatitude: elements.gpsLatitude.value.trim(),
+        gpsLongitude: elements.gpsLongitude.value.trim(),
+        savedAt: new Date().toISOString(),
+        strata: strata
+    };
+}
+
+function collectCurrentStpWithoutPhotoPersistence() {
+    const strata = [];
+    const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+
+    cards.forEach(function (card) {
+        const photoNames = getCardPhotoEntries(card).map(function (entry) {
+            return entry.name;
+        }).filter(Boolean);
+
+        strata.push({
+            stratumLabel: card.querySelector('[data-field="stratumLabel"]').value,
+            depth: card.querySelector('[data-field="depth"]').value.trim(),
+            munsell: card.querySelector('[data-field="munsell"]').value.trim(),
+            soilType: card.querySelector('[data-field="soilType"]').value.trim(),
+            horizon: card.querySelector('[data-field="horizon"]').value.trim(),
+            artifactCatalog: card.querySelector('[data-field="artifactCatalog"]').value.trim(),
+            artifactSummary: card.querySelector('[data-field="artifactSummary"]').value.trim(),
+            notes: card.querySelector('[data-field="notes"]').value.trim(),
+            photoNames: photoNames,
+            photos: []
+        });
+    });
 
     strata.sort(function (a, b) {
         return Number(a.stratumLabel) - Number(b.stratumLabel);
@@ -2533,8 +2793,14 @@ function handleImportSessionFile() {
             state.referencePhoto = importedSession.referencePhoto;
 
             if (!saveSession()) {
-                alert("Imported session could not be saved in browser storage.");
-                return;
+                const importWarning = getDataSafetyAlertMessage("Imported session loaded.");
+                if (importWarning) {
+                    alert(importWarning);
+                }
+
+                if (!dataSafetyState.lastCoreBackupSaveOk) {
+                    return;
+                }
             }
 
             populateSiteFields();
@@ -2582,6 +2848,10 @@ async function clearSession() {
     state.referencePhoto = "";
 
     localStorage.removeItem(storageKey);
+    localStorage.removeItem(coreDataBackupStorageKey);
+    dataSafetyState.loadedFromCoreBackup = false;
+    dataSafetyState.lastFullSessionSaveOk = true;
+    dataSafetyState.lastCoreBackupSaveOk = true;
     populateSiteFields();
     refreshParentStpOptions();
     renderSavedStps();
@@ -2591,6 +2861,7 @@ async function clearSession() {
     setReferencePhotoMessage("", false);
     elements.projectImageInput.value = "";
     resetCurrentStp(true);
+    updateDataSafetyStatus();
 
     try {
         await cleanupDeletedPhotoIds(removedPhotoIds);
@@ -2663,6 +2934,10 @@ function saveProjectAndStartNew() {
     state.referencePhoto = "";
 
     localStorage.removeItem(storageKey);
+    localStorage.removeItem(coreDataBackupStorageKey);
+    dataSafetyState.loadedFromCoreBackup = false;
+    dataSafetyState.lastFullSessionSaveOk = true;
+    dataSafetyState.lastCoreBackupSaveOk = true;
     populateSiteFields();
     refreshParentStpOptions();
     renderSavedStps();
@@ -2672,6 +2947,7 @@ function saveProjectAndStartNew() {
     setReferencePhotoMessage("", false);
     elements.projectImageInput.value = "";
     resetCurrentStp(true);
+    updateDataSafetyStatus();
 }
 
 async function loadProject(projectId) {
@@ -2699,7 +2975,14 @@ async function loadProject(projectId) {
     state.referencePhoto = project.referencePhoto || project.referenceImage || "";
 
     if (!saveSession()) {
-        alert("This project is too large for browser storage. Try a smaller map image.");
+        const loadWarning = getDataSafetyAlertMessage("Project loaded.");
+        if (loadWarning) {
+            alert(loadWarning);
+        }
+
+        if (!dataSafetyState.lastCoreBackupSaveOk) {
+            return;
+        }
     }
 
     populateSiteFields();
@@ -2847,6 +3130,71 @@ function isSupportedProjectImage(file) {
 
 function bytesToMegabytesText(value) {
     return (value / (1024 * 1024)).toFixed(1);
+}
+
+function estimateStoredImageBytes(value) {
+    if (typeof value !== "string" || !value.startsWith("data:")) {
+        return 0;
+    }
+
+    return estimateDataUrlBytes(value);
+}
+
+function getApproxLocalStorageSnapshot() {
+    const quotaBytes = approximateLocalStorageQuotaBytes;
+    let usedBytes = 0;
+
+    try {
+        for (let index = 0; index < localStorage.length; index += 1) {
+            const key = localStorage.key(index);
+            if (!key) {
+                continue;
+            }
+
+            const value = localStorage.getItem(key) || "";
+            usedBytes += (key.length + value.length) * 2;
+        }
+    } catch (error) {
+        console.warn("Could not estimate browser storage usage.", error);
+    }
+
+    return {
+        quotaBytes: quotaBytes,
+        usedBytes: usedBytes,
+        availableBytes: Math.max(0, quotaBytes - usedBytes)
+    };
+}
+
+function getImageStorageBreakdown() {
+    const snapshot = getApproxLocalStorageSnapshot();
+
+    return {
+        mapBytes: estimateStoredImageBytes(state.projectImage),
+        referenceBytes: estimateStoredImageBytes(state.referencePhoto),
+        availableBytes: snapshot.availableBytes,
+        quotaBytes: snapshot.quotaBytes
+    };
+}
+
+function getApproxImageSpaceLeftText() {
+    const storage = getImageStorageBreakdown();
+    return "Approx free browser storage: " + bytesToMegabytesText(storage.availableBytes) + " MB.";
+}
+
+function updateImageStorageStatus() {
+    if (!elements.imageStorageStatus) {
+        return;
+    }
+
+    const storage = getImageStorageBreakdown();
+    elements.imageStorageStatus.textContent =
+        "Map "
+        + bytesToMegabytesText(storage.mapBytes)
+        + " MB | Reference "
+        + bytesToMegabytesText(storage.referenceBytes)
+        + " MB | Approx free "
+        + bytesToMegabytesText(storage.availableBytes)
+        + " MB";
 }
 
 function estimateDataUrlBytes(dataUrl) {
@@ -3013,8 +3361,8 @@ async function createCompatibleImagePayload(file, maxBytes, qualityMode) {
 }
 
 function getStorageFallbackByteTargets(maxBytes) {
-    const minimumTargetBytes = 900 * 1024;
-    const fallbackFactors = [0.8, 0.65, 0.52, 0.4, 0.32];
+    const minimumTargetBytes = 220 * 1024;
+    const fallbackFactors = [0.8, 0.65, 0.52, 0.4, 0.32, 0.24, 0.18, 0.14, 0.1];
     const targets = [];
 
     fallbackFactors.forEach(function (factor) {
@@ -3105,6 +3453,8 @@ function renderReferencePhoto() {
     if (elements.referencePhotoSavedHint) {
         elements.referencePhotoSavedHint.hidden = !hasPhoto;
     }
+
+    updateImageStorageStatus();
 }
 
 function clearReferencePhoto(showMessage) {
@@ -3114,7 +3464,10 @@ function clearReferencePhoto(showMessage) {
     if (!saveSession()) {
         state.referencePhoto = previousPhoto;
         renderReferencePhoto();
-        setReferencePhotoMessage("Reference photo could not be updated in browser storage.", true);
+        setReferencePhotoMessage(
+            "Reference photo could not be updated in browser storage. " + getApproxImageSpaceLeftText(),
+            true
+        );
         return;
     }
 
@@ -3123,7 +3476,10 @@ function clearReferencePhoto(showMessage) {
     }
 
     renderReferencePhoto();
-    setReferencePhotoMessage(showMessage ? "Reference photo removed. Showing stock reference image." : "", false);
+    setReferencePhotoMessage(
+        showMessage ? "Reference photo removed. Showing stock reference image. " + getApproxImageSpaceLeftText() : "",
+        false
+    );
 }
 
 function openReferencePhotoPicker() {
@@ -3182,7 +3538,7 @@ async function handleReferencePhotoUpload() {
 
     if (imagePayload.outputBytes > maxReferencePhotoSizeBytes) {
         setReferencePhotoMessage(
-            "Reference photo is still too large after resizing. Try a smaller image.",
+            "Reference photo is still too large after resizing. Try a smaller image. " + getApproxImageSpaceLeftText(),
             true
         );
         elements.referencePhotoInput.value = "";
@@ -3204,7 +3560,10 @@ async function handleReferencePhotoUpload() {
     if (!persistence.saved) {
         state.referencePhoto = previousPhoto;
         renderReferencePhoto();
-        setReferencePhotoMessage("Reference photo could not be saved. Use a smaller image or clear older photos.", true);
+        setReferencePhotoMessage(
+            "Reference photo could not be saved. Use a smaller image or clear older photos. " + getApproxImageSpaceLeftText(),
+            true
+        );
         elements.referencePhotoInput.value = "";
         return;
     }
@@ -3223,7 +3582,9 @@ async function handleReferencePhotoUpload() {
                 + " MB, "
                 + getImportQualityModeLabel(imagePayload.qualityMode)
                 + " mode)."
-                + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : ""),
+                + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : "")
+                + " "
+                + getApproxImageSpaceLeftText(),
             false
         );
         return;
@@ -3237,7 +3598,9 @@ async function handleReferencePhotoUpload() {
             + " MB, "
             + getImportQualityModeLabel(imagePayload.qualityMode)
             + " mode)."
-            + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : ""),
+            + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : "")
+            + " "
+            + getApproxImageSpaceLeftText(),
         false
     );
 }
@@ -3360,7 +3723,7 @@ async function handleProjectImageUpload() {
     }
 
     if (imagePayload.outputBytes > maxProjectImageSizeBytes) {
-        setProjectImageMessage("Image is still too large after resizing. Try a smaller file.", true);
+        setProjectImageMessage("Image is still too large after resizing. Try a smaller file. " + getApproxImageSpaceLeftText(), true);
         elements.projectImageInput.value = "";
         return;
     }
@@ -3380,7 +3743,10 @@ async function handleProjectImageUpload() {
     if (!persistence.saved) {
         state.projectImage = previousImage;
         renderProjectBanner();
-        setProjectImageMessage("Image could not be saved. Use a smaller file or clear older photos.", true);
+        setProjectImageMessage(
+            "Image could not be saved. Use a smaller file or clear older photos. " + getApproxImageSpaceLeftText(),
+            true
+        );
         elements.projectImageInput.value = "";
         return;
     }
@@ -3400,6 +3766,8 @@ async function handleProjectImageUpload() {
                 + getImportQualityModeLabel(imagePayload.qualityMode)
                 + " mode)."
                 + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : "")
+                + " "
+                + getApproxImageSpaceLeftText()
                 + " Use View Map Full Screen to expand it.",
             false
         );
@@ -3415,6 +3783,8 @@ async function handleProjectImageUpload() {
             + getImportQualityModeLabel(imagePayload.qualityMode)
             + " mode)."
             + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : "")
+            + " "
+            + getApproxImageSpaceLeftText()
             + " Use View Map Full Screen to expand it.",
         false
     );
@@ -3442,5 +3812,7 @@ function renderProjectBanner() {
         elements.projectBannerImg.src = "";
         closeMapViewer();
     }
+
+    updateImageStorageStatus();
 }
 

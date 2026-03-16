@@ -17,7 +17,7 @@
                 <div class="project-banner-actions">
                     <label class="project-banner-upload-btn">
                         Upload Map Image
-                        <input type="file" id="projectImageInput" accept=".jpg,.jpeg,.png,.webp">
+                        <input type="file" id="projectImageInput" accept="image/*">
                     </label>
                     <button type="button" id="openProjectImageButton" class="primary-button" hidden>View Map Full Screen</button>
                     <button type="button" id="removeProjectImageButton" class="ghost-button" hidden>Remove</button>
@@ -25,7 +25,7 @@
             </div>
         </div>
         <div class="project-banner-meta" aria-live="polite">
-            <p class="project-banner-help">Accepted files: JPG, PNG, WEBP up to 4 MB.</p>
+            <p class="project-banner-help">Accepted image files with automatic optimization to a 4 MB target.</p>
             <p id="projectImageMessage" class="project-banner-message" aria-live="polite"></p>
         </div>
 
@@ -48,6 +48,8 @@
                     <button type="button" id="highContrastToggle" class="ghost-button contrast-toggle" aria-pressed="false">High Contrast: Off</button>
                     <button type="button" id="importQualityToggle" class="ghost-button contrast-toggle" aria-pressed="true">Import Quality: Sharp</button>
                 </div>
+                <p id="dataSafetyStatus" class="session-storage-status" aria-live="polite"></p>
+                <p id="imageStorageStatus" class="session-storage-status" aria-live="polite"></p>
             </div>
         </header>
 
@@ -352,7 +354,7 @@
 
                 <div class="field field-notes">
                     <span>Photo Names (editable)</span>
-                    <p class="photo-help">Photos are auto-named from the rule. Edit names below or remove any incorrect entry. Saved STPs keep photo files in this browser.</p>
+                    <p class="photo-help">Photos are auto-named from the rule. Edit names below or remove any incorrect entry. Saved STPs keep photo labels only; photo files remain in your phone storage.</p>
                     <ul class="photo-list" data-photo-list></ul>
                     <p class="photo-warning" data-photo-warning></p>
                 </div>

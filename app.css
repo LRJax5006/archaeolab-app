@@ -98,6 +98,18 @@ h1 {
     gap: 10px;
 }
 
+.session-storage-status {
+    margin: 12px 0 0;
+    font-size: 0.84rem;
+    line-height: 1.45;
+    color: var(--ink-soft);
+}
+
+.session-storage-status.is-warning {
+    color: var(--error);
+    font-weight: 700;
+}
+
 .session-status {
     margin: 0 0 18px;
     font-size: 1.6rem;
@@ -843,6 +855,14 @@ body.high-contrast .eyebrow,
 body.high-contrast .stratum-kicker,
 body.high-contrast .hero-card-label {
     color: #5f0000;
+}
+
+body.high-contrast .session-storage-status {
+    color: #111111;
+}
+
+body.high-contrast .session-storage-status.is-warning {
+    color: #8f0000;
 }
 
 body.high-contrast .hero-card,
