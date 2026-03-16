@@ -119,6 +119,7 @@
                                 <select id="stpEntryType" name="stpEntryType">
                                     <option value="base">Base STP</option>
                                     <option value="supplemental">Supplemental STP</option>
+                                    <option value="unit-id">Unit ID</option>
                                 </select>
                             </label>
 
@@ -129,15 +130,20 @@
                                 </select>
                             </label>
 
-                            <label class="field">
-                                <span>GPS Latitude</span>
-                                <input type="number" id="gpsLatitude" name="gpsLatitude" step="any" min="-90" max="90" placeholder="38.98765">
-                            </label>
+                            <div class="field stp-label-field gps-field">
+                                <span>GPS of 1st STP</span>
+                                <div class="gps-inline">
+                                    <label class="field">
+                                        <span>Lat</span>
+                                        <input type="number" id="gpsLatitude" name="gpsLatitude" step="any" min="-90" max="90" placeholder="38.98765">
+                                    </label>
 
-                            <label class="field">
-                                <span>GPS Longitude</span>
-                                <input type="number" id="gpsLongitude" name="gpsLongitude" step="any" min="-180" max="180" placeholder="-76.94567">
-                            </label>
+                                    <label class="field">
+                                        <span>Lon</span>
+                                        <input type="number" id="gpsLongitude" name="gpsLongitude" step="any" min="-180" max="180" placeholder="-76.94567">
+                                    </label>
+                                </div>
+                            </div>
 
                             <div class="field stp-label-field">
                                 <label for="stpLabel">Current STP Label</label>
@@ -157,7 +163,7 @@
                                     </select>
                                 </label>
 
-                                <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W.</p>
+                                <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W. Use Unit ID for unit-based identifiers.</p>
                             </div>
                         </div>
 
