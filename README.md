@@ -43,7 +43,7 @@ This repository includes an automatic Pages workflow.
 
 1. Open the live app and confirm all sections load.
 2. Create one STP with at least two strata and save it.
-3. Upload a map image and verify it opens as a reference view.
+3. Upload stratum photos and verify names are auto-generated, editable, and deletable.
 4. Save the session as a project, then load that project.
 5. Export XLSX and CSV to confirm downloads work.
 

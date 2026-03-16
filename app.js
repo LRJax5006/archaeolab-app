@@ -473,6 +473,29 @@ function renumberStrata() {
 }
 
 function handleStrataListClick(event) {
+    const removePhotoButton = event.target.closest("[data-photo-remove]");
+
+    if (removePhotoButton) {
+        const card = removePhotoButton.closest(".stratum-card");
+
+        if (!card) {
+            return;
+        }
+
+        const removeIndex = Number(removePhotoButton.getAttribute("data-photo-remove"));
+        const names = getCardPhotoNames(card);
+
+        if (Number.isNaN(removeIndex) || removeIndex < 0 || removeIndex >= names.length) {
+            return;
+        }
+
+        names.splice(removeIndex, 1);
+        setCardPhotoNames(card, names);
+        validatePhotoNamesForCard(card);
+        renderPhotoListForCard(card);
+        return;
+    }
+
     const removeButton = event.target.closest("[data-remove-stratum]");
 
     if (!removeButton) {
@@ -497,6 +520,36 @@ function handleStrataListClick(event) {
 function handleStrataListInput(event) {
     const field = event.target;
 
+    if (!field) {
+        return;
+    }
+
+    if (field.matches("[data-photo-name-input]")) {
+        const card = field.closest(".stratum-card");
+
+        if (!card) {
+            return;
+        }
+
+        const photoIndex = Number(field.getAttribute("data-photo-index"));
+        const names = getCardPhotoNames(card);
+
+        if (Number.isNaN(photoIndex) || photoIndex < 0 || photoIndex >= names.length) {
+            return;
+        }
+
+        names[photoIndex] = field.value;
+        setCardPhotoNames(card, names);
+        validatePhotoNamesForCard(card);
+
+        const warningElement = card.querySelector("[data-photo-warning]");
+        if (warningElement) {
+            warningElement.textContent = card.dataset.photoWarning || "";
+        }
+
+        return;
+    }
+
     if (!field || !field.matches("[data-field]")) {
         return;
     }
@@ -511,6 +564,31 @@ function handleStrataListInput(event) {
 
 function handleStrataListChange(event) {
     const field = event.target;
+
+    if (!field) {
+        return;
+    }
+
+    if (field.matches("[data-photo-name-input]")) {
+        const card = field.closest(".stratum-card");
+
+        if (!card) {
+            return;
+        }
+
+        const photoIndex = Number(field.getAttribute("data-photo-index"));
+        const names = getCardPhotoNames(card);
+
+        if (Number.isNaN(photoIndex) || photoIndex < 0 || photoIndex >= names.length) {
+            return;
+        }
+
+        names[photoIndex] = field.value.trim();
+        setCardPhotoNames(card, names);
+        validatePhotoNamesForCard(card);
+        renderPhotoListForCard(card);
+        return;
+    }
 
     if (!field || !field.matches("[data-field]")) {
         return;
@@ -528,13 +606,23 @@ function handleStrataListChange(event) {
         return;
     }
 
-    const photoNames = Array.from(field.files || []).map(function (file) {
-        return file.name;
+    const selectedFiles = Array.from(field.files || []);
+
+    if (selectedFiles.length === 0) {
+        return;
+    }
+
+    const existingNames = getCardPhotoNames(card);
+    const stratumLabelField = card.querySelector('[data-field="stratumLabel"]');
+    const prefix = card.dataset.photoPrefix || buildPhotoPrefix(stratumLabelField ? stratumLabelField.value : "1");
+    const photoNames = selectedFiles.map(function (file, index) {
+        return buildAutoPhotoName(prefix, existingNames.length + index + 1, file.name);
     });
 
-    setCardPhotoNames(card, photoNames);
+    setCardPhotoNames(card, existingNames.concat(photoNames));
     validatePhotoNamesForCard(card);
     renderPhotoListForCard(card);
+    field.value = "";
 }
 
 function sanitizeToken(value) {
@@ -547,6 +635,22 @@ function sanitizeToken(value) {
 
 function escapeRegExp(value) {
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function getFileExtension(fileName) {
+    const match = /\.([A-Za-z0-9]+)$/.exec(String(fileName || ""));
+
+    if (!match) {
+        return ".jpg";
+    }
+
+    return "." + match[1].toLowerCase();
+}
+
+function buildAutoPhotoName(prefix, sequence, fileName) {
+    const safeSequence = Number.isFinite(sequence) ? Math.max(1, sequence) : 1;
+    const numberToken = String(safeSequence).padStart(2, "0");
+    return prefix + "_" + numberToken + getFileExtension(fileName);
 }
 
 function getDisplayStpLabelFromForm() {
@@ -585,9 +689,19 @@ function updatePhotoRuleForCard(card) {
         return;
     }
 
+    const previousPrefix = card.dataset.photoPrefix || "";
     const prefix = buildPhotoPrefix(stratumLabelField.value || "1");
     card.dataset.photoPrefix = prefix;
     photoRuleField.value = prefix + "_01.jpg";
+
+    const existingNames = getCardPhotoNames(card);
+    if (existingNames.length > 0 && previousPrefix && previousPrefix !== prefix) {
+        const renamedNames = existingNames.map(function (name, index) {
+            return buildAutoPhotoName(prefix, index + 1, name);
+        });
+
+        setCardPhotoNames(card, renamedNames);
+    }
 
     validatePhotoNamesForCard(card);
     renderPhotoListForCard(card);
@@ -615,7 +729,13 @@ function getCardPhotoNames(card) {
 }
 
 function setCardPhotoNames(card, names) {
-    card.dataset.photoNames = JSON.stringify(Array.isArray(names) ? names : []);
+    const safeNames = Array.isArray(names)
+        ? names.map(function (name) {
+            return String(name == null ? "" : name);
+        })
+        : [];
+
+    card.dataset.photoNames = JSON.stringify(safeNames);
 }
 
 function setPhotoWarning(card, text) {
@@ -664,9 +784,26 @@ function renderPhotoListForCard(card) {
         emptyItem.textContent = "No files selected.";
         listElement.appendChild(emptyItem);
     } else {
-        names.forEach(function (name) {
+        names.forEach(function (name, index) {
             const item = document.createElement("li");
-            item.textContent = name;
+            item.className = "photo-item";
+
+            const nameInput = document.createElement("input");
+            nameInput.type = "text";
+            nameInput.className = "photo-name-input";
+            nameInput.value = name;
+            nameInput.setAttribute("data-photo-name-input", "true");
+            nameInput.setAttribute("data-photo-index", String(index));
+            nameInput.setAttribute("aria-label", "Photo name " + String(index + 1));
+
+            const removeButton = document.createElement("button");
+            removeButton.type = "button";
+            removeButton.className = "photo-remove-button";
+            removeButton.setAttribute("data-photo-remove", String(index));
+            removeButton.textContent = "Delete";
+
+            item.appendChild(nameInput);
+            item.appendChild(removeButton);
             listElement.appendChild(item);
         });
     }
@@ -773,10 +910,10 @@ function saveCurrentStp() {
 
     const invalidPhotoCard = findFirstInvalidPhotoCard();
     if (invalidPhotoCard) {
-        alert("One or more photo names do not match the naming rule. Fix the listed names before saving.");
-        const photoField = invalidPhotoCard.querySelector('[data-field="photos"]');
-        if (photoField) {
-            photoField.focus();
+        alert("One or more photo names do not match the naming rule. Edit or delete invalid names before saving.");
+        const photoNameInput = invalidPhotoCard.querySelector("[data-photo-name-input]");
+        if (photoNameInput) {
+            photoNameInput.focus();
         }
         return;
     }
@@ -1048,7 +1185,6 @@ function buildFlatExportRows() {
         const stpParts = parseStpLabel(exportStp);
 
         stp.strata.forEach(function (stratum) {
-            const munsellParts = getMunsellPartsForExport(stratum);
             const photoNames = Array.isArray(stratum.photoNames) ? stratum.photoNames.join("; ") : "";
 
             rows.push({
@@ -1058,10 +1194,7 @@ function buildFlatExportRows() {
                 "STP": exportStp,
                 "Stratum": stratum.stratumLabel,
                 "Depth": stratum.depth,
-                "Munsell 1": munsellParts.munsell1,
-                "Munsell 2": munsellParts.munsell2,
-                "Munsell 3": munsellParts.munsell3,
-                "Munsell": munsellParts.munsellCombined || stratum.munsell,
+                "Munsell": stratum.munsell,
                 "Texture": stratum.soilType,
                 "Horizon": stratum.horizon,
                 "Notes/Inclusions": stratum.notes,
@@ -1091,9 +1224,6 @@ function getExportHeaders() {
         "STP",
         "Stratum",
         "Depth",
-        "Munsell 1",
-        "Munsell 2",
-        "Munsell 3",
         "Munsell",
         "Texture",
         "Horizon",

@@ -348,13 +348,47 @@ button:hover {
 }
 
 .photo-list {
+    list-style: none;
     margin: 4px 0 0;
-    padding-left: 20px;
+    padding-left: 0;
+    display: grid;
+    gap: 8px;
 }
 
 .photo-list li {
-    margin: 2px 0;
+    margin: 0;
     color: var(--ink-soft);
+}
+
+.photo-help {
+    margin: 4px 0 0;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+}
+
+.photo-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.photo-name-input {
+    width: 100%;
+}
+
+.photo-remove-button {
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.photo-remove-button:hover {
+    background: rgba(111, 78, 55, 0.08);
 }
 
 .photo-warning {
@@ -547,6 +581,15 @@ button:hover {
 
     .map-viewer-img {
         height: min(72vh, 700px);
+    }
+
+    .photo-item {
+        grid-template-columns: 1fr;
+    }
+
+    .photo-remove-button {
+        width: auto;
+        justify-self: start;
     }
 
     button {
