@@ -1,8 +1,12 @@
 const storageKey = "archaeolab-stp-session-v1";
 const projectsStorageKey = "archaeolab-projects-v1";
+const filterStorageKey = "archaeolab-ui-filters-v1";
+const contrastModeStorageKey = "archaeolab-contrast-mode-v1";
 const maxProjectImageSizeBytes = 3 * 1024 * 1024;
 const supportedProjectImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const supportedProjectImageExtensions = [".jpg", ".jpeg", ".png", ".webp"];
+const validDepthUnits = ["metric", "standard", "engineering-feet"];
+const validEntryTypes = ["base", "supplemental", "unit-id"];
 const photoDatabaseName = "archaeolab-stp-photos-v1";
 const photoDatabaseStore = "photos";
 const photoDatabaseVersion = 1;
@@ -260,9 +264,11 @@ document.addEventListener("DOMContentLoaded", initializeApp);
 
 function initializeApp() {
     cacheElements();
+    loadContrastMode();
     populateDropdownDatalists();
     bindEvents();
     loadSession();
+    loadFilterState();
     populateSiteFields();
     refreshParentStpOptions();
     updateStpTypeUi();
@@ -294,11 +300,25 @@ function cacheElements() {
     elements.exportXlsxButton = document.getElementById("exportXlsxButton");
     elements.exportCsvButton = document.getElementById("exportCsvButton");
     elements.exportJsonButton = document.getElementById("exportJsonButton");
+    elements.importJsonButton = document.getElementById("importJsonButton");
+    elements.importJsonInput = document.getElementById("importJsonInput");
     elements.clearSessionButton = document.getElementById("clearSessionButton");
+    elements.highContrastToggle = document.getElementById("highContrastToggle");
     elements.suggestLabelButton = document.getElementById("suggestLabelButton");
     elements.saveProjectButton = document.getElementById("saveProjectButton");
     elements.projectsEmptyState = document.getElementById("projectsEmptyState");
     elements.projectsList = document.getElementById("projectsList");
+    elements.projectSearchInput = document.getElementById("projectSearchInput");
+    elements.projectSortSelect = document.getElementById("projectSortSelect");
+    elements.savedStpSearchInput = document.getElementById("savedStpSearchInput");
+    elements.savedStpTypeFilter = document.getElementById("savedStpTypeFilter");
+    elements.savedStpSortSelect = document.getElementById("savedStpSortSelect");
+    elements.clearProjectFiltersButton = document.getElementById("clearProjectFiltersButton");
+    elements.clearSavedStpFiltersButton = document.getElementById("clearSavedStpFiltersButton");
+    elements.projectsFilterSummary = document.getElementById("projectsFilterSummary");
+    elements.savedStpFilterSummary = document.getElementById("savedStpFilterSummary");
+    elements.projectsHeaderCount = document.getElementById("projectsHeaderCount");
+    elements.savedStpHeaderCount = document.getElementById("savedStpHeaderCount");
     elements.projectBannerImg = document.getElementById("projectBannerImg");
     elements.projectBannerEmpty = document.getElementById("projectBannerEmpty");
     elements.projectImageInput = document.getElementById("projectImageInput");
@@ -322,7 +342,14 @@ function bindEvents() {
     elements.exportXlsxButton.addEventListener("click", downloadExcelReadyXlsx);
     elements.exportCsvButton.addEventListener("click", downloadExcelReadyCsv);
     elements.exportJsonButton.addEventListener("click", downloadSessionData);
+    elements.importJsonButton.addEventListener("click", requestImportSessionFile);
+    elements.importJsonInput.addEventListener("change", handleImportSessionFile);
     elements.clearSessionButton.addEventListener("click", clearSession);
+
+    if (elements.highContrastToggle) {
+        elements.highContrastToggle.addEventListener("click", handleContrastToggle);
+    }
+
     elements.suggestLabelButton.addEventListener("click", suggestFromCurrentInput);
     elements.saveProjectButton.addEventListener("click", saveProjectAndStartNew);
     elements.projectImageInput.addEventListener("change", handleProjectImageUpload);
@@ -353,6 +380,16 @@ function bindEvents() {
         refreshPhotoRulesAll();
     });
 
+    elements.projectSearchInput.addEventListener("input", handleProjectFilterInput);
+    elements.projectSearchInput.addEventListener("keydown", handleFilterSearchKeydown);
+    elements.projectSortSelect.addEventListener("change", handleProjectFilterInput);
+    elements.savedStpSearchInput.addEventListener("input", handleSavedStpFilterInput);
+    elements.savedStpSearchInput.addEventListener("keydown", handleFilterSearchKeydown);
+    elements.savedStpTypeFilter.addEventListener("change", handleSavedStpFilterInput);
+    elements.savedStpSortSelect.addEventListener("change", handleSavedStpFilterInput);
+    elements.clearProjectFiltersButton.addEventListener("click", clearProjectFilters);
+    elements.clearSavedStpFiltersButton.addEventListener("click", clearSavedStpFilters);
+
     elements.strataList.addEventListener("click", handleStrataListClick);
     elements.strataList.addEventListener("input", handleStrataListInput);
     elements.strataList.addEventListener("change", handleStrataListChange);
@@ -380,6 +417,507 @@ function populateDatalist(datalistId, values) {
     });
 }
 
+function normalizeTextValue(value) {
+    return String(value == null ? "" : value).trim();
+}
+
+function normalizeDepthUnitValue(value) {
+    const normalized = normalizeTextValue(value).toLowerCase();
+    return validDepthUnits.includes(normalized) ? normalized : "metric";
+}
+
+function normalizeEntryTypeValue(value) {
+    const normalized = normalizeTextValue(value).toLowerCase();
+    return validEntryTypes.includes(normalized) ? normalized : "base";
+}
+
+function normalizeSupDirectionValue(value) {
+    const normalized = normalizeTextValue(value).toUpperCase();
+    return ["N", "S", "E", "W"].includes(normalized) ? normalized : "";
+}
+
+function normalizeImportedStratum(stratum) {
+    const rawStratum = stratum && typeof stratum === "object" ? stratum : {};
+    const rawPhotos = Array.isArray(rawStratum.photos) ? rawStratum.photos : [];
+    const photos = rawPhotos.map(function (entry) {
+        const normalized = normalizePhotoEntry(entry);
+
+        return {
+            id: normalized.id,
+            name: normalizeTextValue(normalized.name),
+            type: normalized.type,
+            size: normalized.size
+        };
+    }).filter(function (entry) {
+        return Boolean(entry.id) || Boolean(entry.name);
+    });
+
+    const rawPhotoNames = Array.isArray(rawStratum.photoNames) ? rawStratum.photoNames : [];
+    const photoNames = rawPhotoNames.map(normalizeTextValue).filter(Boolean);
+    const fallbackPhotoNames = photos.map(function (entry) {
+        return normalizeTextValue(entry.name);
+    }).filter(Boolean);
+
+    return {
+        stratumLabel: normalizeTextValue(rawStratum.stratumLabel),
+        depth: normalizeTextValue(rawStratum.depth),
+        munsell: normalizeTextValue(rawStratum.munsell),
+        soilType: normalizeTextValue(rawStratum.soilType),
+        horizon: normalizeTextValue(rawStratum.horizon),
+        artifactCatalog: normalizeTextValue(rawStratum.artifactCatalog),
+        artifactSummary: normalizeTextValue(rawStratum.artifactSummary),
+        notes: normalizeTextValue(rawStratum.notes),
+        photoNames: photoNames.length > 0 ? photoNames : fallbackPhotoNames,
+        photos: photos
+    };
+}
+
+function normalizeImportedStp(stp, defaults) {
+    const rawStp = stp && typeof stp === "object" ? stp : {};
+    const entryType = normalizeEntryTypeValue(rawStp.entryType);
+    const parentStp = entryType === "supplemental" ? normalizeTextValue(rawStp.parentStp) : "";
+    const supDirection = entryType === "supplemental" ? normalizeSupDirectionValue(rawStp.supDirection) : "";
+
+    return {
+        siteName: normalizeTextValue(rawStp.siteName || defaults.siteName),
+        siteLocation: normalizeTextValue(rawStp.siteLocation || defaults.siteLocation),
+        depthUnit: normalizeDepthUnitValue(rawStp.depthUnit || defaults.depthUnit),
+        stpLabel: normalizeTextValue(rawStp.stpLabel),
+        entryType: entryType,
+        parentStp: parentStp,
+        supDirection: supDirection,
+        gpsLatitude: normalizeTextValue(rawStp.gpsLatitude),
+        gpsLongitude: normalizeTextValue(rawStp.gpsLongitude),
+        savedAt: normalizeTextValue(rawStp.savedAt) || new Date().toISOString(),
+        strata: (Array.isArray(rawStp.strata) ? rawStp.strata : []).map(normalizeImportedStratum)
+    };
+}
+
+function normalizeImportedSession(sessionData) {
+    const rawSession = sessionData && typeof sessionData === "object" ? sessionData : {};
+    const siteName = normalizeTextValue(rawSession.siteName);
+    const siteLocation = normalizeTextValue(rawSession.siteLocation);
+    const depthUnit = normalizeDepthUnitValue(rawSession.depthUnit);
+    const defaults = {
+        siteName: siteName,
+        siteLocation: siteLocation,
+        depthUnit: depthUnit
+    };
+
+    return {
+        siteName: siteName,
+        siteLocation: siteLocation,
+        depthUnit: depthUnit,
+        stps: (Array.isArray(rawSession.stps) ? rawSession.stps : []).map(function (stp) {
+            return normalizeImportedStp(stp, defaults);
+        }),
+        projectImage: typeof rawSession.projectImage === "string" ? rawSession.projectImage : ""
+    };
+}
+
+function normalizeSearchToken(value) {
+    return normalizeTextValue(value).toLowerCase();
+}
+
+function setHighlightedText(targetElement, textValue, searchTerm) {
+    if (!targetElement) {
+        return;
+    }
+
+    const sourceText = String(textValue == null ? "" : textValue);
+    const normalizedTerm = normalizeSearchToken(searchTerm);
+    targetElement.textContent = "";
+
+    if (!normalizedTerm) {
+        targetElement.textContent = sourceText || "-";
+        return;
+    }
+
+    const lowerSource = sourceText.toLowerCase();
+    let startIndex = 0;
+    let matchIndex = lowerSource.indexOf(normalizedTerm, startIndex);
+
+    if (matchIndex === -1) {
+        targetElement.textContent = sourceText || "-";
+        return;
+    }
+
+    while (matchIndex !== -1) {
+        if (matchIndex > startIndex) {
+            targetElement.appendChild(document.createTextNode(sourceText.slice(startIndex, matchIndex)));
+        }
+
+        const mark = document.createElement("mark");
+        mark.className = "filter-match";
+        mark.textContent = sourceText.slice(matchIndex, matchIndex + normalizedTerm.length);
+        targetElement.appendChild(mark);
+
+        startIndex = matchIndex + normalizedTerm.length;
+        matchIndex = lowerSource.indexOf(normalizedTerm, startIndex);
+    }
+
+    if (startIndex < sourceText.length) {
+        targetElement.appendChild(document.createTextNode(sourceText.slice(startIndex)));
+    }
+}
+
+function getFilterStateFromInputs() {
+    return {
+        projectSearch: normalizeTextValue(elements.projectSearchInput ? elements.projectSearchInput.value : ""),
+        projectSort: getProjectSortValue(),
+        savedStpSearch: normalizeTextValue(elements.savedStpSearchInput ? elements.savedStpSearchInput.value : ""),
+        savedStpType: getSavedStpTypeFilterValue(),
+        savedStpSort: getSavedStpSortValue()
+    };
+}
+
+function saveFilterState() {
+    try {
+        localStorage.setItem(filterStorageKey, JSON.stringify(getFilterStateFromInputs()));
+    } catch (error) {
+        console.warn("Could not save filter state.", error);
+    }
+}
+
+function loadFilterState() {
+    const rawFilterState = localStorage.getItem(filterStorageKey);
+
+    if (!rawFilterState) {
+        return;
+    }
+
+    try {
+        const parsed = JSON.parse(rawFilterState);
+
+        if (elements.projectSearchInput) {
+            elements.projectSearchInput.value = normalizeTextValue(parsed.projectSearch);
+        }
+
+        if (elements.savedStpSearchInput) {
+            elements.savedStpSearchInput.value = normalizeTextValue(parsed.savedStpSearch);
+        }
+
+        if (elements.savedStpTypeFilter) {
+            const savedType = normalizeSearchToken(parsed.savedStpType || "all");
+            elements.savedStpTypeFilter.value = ["all", "base", "supplemental", "unit-id"].includes(savedType)
+                ? savedType
+                : "all";
+        }
+
+        if (elements.projectSortSelect) {
+            const projectSort = normalizeSearchToken(parsed.projectSort || "newest");
+            elements.projectSortSelect.value = ["newest", "oldest", "az"].includes(projectSort)
+                ? projectSort
+                : "newest";
+        }
+
+        if (elements.savedStpSortSelect) {
+            const savedStpSort = normalizeSearchToken(parsed.savedStpSort || "newest");
+            elements.savedStpSortSelect.value = ["newest", "oldest", "az"].includes(savedStpSort)
+                ? savedStpSort
+                : "newest";
+        }
+    } catch (error) {
+        console.warn("Could not load filter state.", error);
+    }
+}
+
+function loadContrastMode() {
+    let isHighContrast = false;
+
+    try {
+        isHighContrast = localStorage.getItem(contrastModeStorageKey) === "on";
+    } catch (error) {
+        console.warn("Could not load contrast mode preference.", error);
+    }
+
+    applyContrastMode(isHighContrast, false);
+}
+
+function handleContrastToggle() {
+    const isHighContrast = !document.body.classList.contains("high-contrast");
+    applyContrastMode(isHighContrast, true);
+}
+
+function applyContrastMode(isHighContrast, shouldPersist) {
+    document.body.classList.toggle("high-contrast", Boolean(isHighContrast));
+
+    if (elements.highContrastToggle) {
+        const toggleLabel = isHighContrast ? "High Contrast: On" : "High Contrast: Off";
+        elements.highContrastToggle.textContent = toggleLabel;
+        elements.highContrastToggle.setAttribute("aria-pressed", isHighContrast ? "true" : "false");
+        elements.highContrastToggle.setAttribute("aria-label", toggleLabel);
+    }
+
+    if (!shouldPersist) {
+        return;
+    }
+
+    try {
+        localStorage.setItem(contrastModeStorageKey, isHighContrast ? "on" : "off");
+    } catch (error) {
+        console.warn("Could not save contrast mode preference.", error);
+    }
+}
+
+function updateProjectFilterSummary(totalCount, matchedCount, searchTerm, sortValue) {
+    const hasSearch = Boolean(searchTerm);
+    const hasCustomSort = sortValue !== "newest";
+    const hasFilters = hasSearch || hasCustomSort;
+
+    if (elements.projectsFilterSummary) {
+        if (totalCount === 0) {
+            elements.projectsFilterSummary.textContent = "Showing 0 of 0 projects.";
+        } else if (hasFilters) {
+            const sortSuffix = hasCustomSort ? (" | Sort: " + getSortLabel(sortValue)) : "";
+            elements.projectsFilterSummary.textContent = "Showing " + matchedCount + " of " + totalCount + " projects" + sortSuffix + ".";
+        } else {
+            elements.projectsFilterSummary.textContent = "Showing all " + totalCount + " projects.";
+        }
+    }
+
+    if (elements.clearProjectFiltersButton) {
+        elements.clearProjectFiltersButton.hidden = !hasFilters;
+    }
+}
+
+function updateSavedStpFilterSummary(totalCount, matchedCount, searchTerm, typeFilter, sortValue) {
+    const hasCustomSort = sortValue !== "newest";
+    const hasFilters = Boolean(searchTerm) || typeFilter !== "all" || hasCustomSort;
+
+    if (elements.savedStpFilterSummary) {
+        if (totalCount === 0) {
+            elements.savedStpFilterSummary.textContent = "Showing 0 of 0 STPs.";
+        } else if (hasFilters) {
+            const typeSuffix = typeFilter !== "all" ? (" | Type: " + getEntryTypeLabel(typeFilter)) : "";
+            const sortSuffix = hasCustomSort ? (" | Sort: " + getSortLabel(sortValue)) : "";
+            elements.savedStpFilterSummary.textContent = "Showing " + matchedCount + " of " + totalCount + " STPs" + typeSuffix + sortSuffix + ".";
+        } else {
+            elements.savedStpFilterSummary.textContent = "Showing all " + totalCount + " STPs.";
+        }
+    }
+
+    if (elements.clearSavedStpFiltersButton) {
+        elements.clearSavedStpFiltersButton.hidden = !hasFilters;
+    }
+}
+
+function handleProjectFilterInput() {
+    saveFilterState();
+    renderProjects();
+}
+
+function handleSavedStpFilterInput() {
+    saveFilterState();
+    renderSavedStps();
+}
+
+function clearProjectFilters() {
+    elements.projectSearchInput.value = "";
+    elements.projectSortSelect.value = "newest";
+    saveFilterState();
+    renderProjects();
+}
+
+function clearSavedStpFilters() {
+    elements.savedStpSearchInput.value = "";
+    elements.savedStpTypeFilter.value = "all";
+    elements.savedStpSortSelect.value = "newest";
+    saveFilterState();
+    renderSavedStps();
+}
+
+function buildSearchHaystack(values) {
+    return values.map(function (value) {
+        return normalizeTextValue(value);
+    }).join(" ").toLowerCase();
+}
+
+function getProjectSearchTerm() {
+    return normalizeSearchToken(elements.projectSearchInput ? elements.projectSearchInput.value : "");
+}
+
+function getSavedStpSearchTerm() {
+    return normalizeSearchToken(elements.savedStpSearchInput ? elements.savedStpSearchInput.value : "");
+}
+
+function getSavedStpTypeFilterValue() {
+    const typeValue = normalizeSearchToken(elements.savedStpTypeFilter ? elements.savedStpTypeFilter.value : "all");
+    return typeValue || "all";
+}
+
+function getProjectSortValue() {
+    const sortValue = normalizeSearchToken(elements.projectSortSelect ? elements.projectSortSelect.value : "newest");
+    return ["newest", "oldest", "az"].includes(sortValue) ? sortValue : "newest";
+}
+
+function getSavedStpSortValue() {
+    const sortValue = normalizeSearchToken(elements.savedStpSortSelect ? elements.savedStpSortSelect.value : "newest");
+    return ["newest", "oldest", "az"].includes(sortValue) ? sortValue : "newest";
+}
+
+function getSortLabel(sortValue) {
+    if (sortValue === "oldest") {
+        return "Oldest";
+    }
+
+    if (sortValue === "az") {
+        return "A-Z";
+    }
+
+    return "Newest";
+}
+
+function getSavedTimestampValue(record) {
+    const timestamp = Date.parse(normalizeTextValue(record && record.savedAt));
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function sortProjectsByValue(projects, sortValue) {
+    const safeProjects = Array.isArray(projects) ? projects.slice() : [];
+
+    if (sortValue === "oldest") {
+        safeProjects.sort(function (a, b) {
+            return getSavedTimestampValue(a) - getSavedTimestampValue(b);
+        });
+        return safeProjects;
+    }
+
+    if (sortValue === "az") {
+        safeProjects.sort(function (a, b) {
+            return normalizeTextValue(a.name).localeCompare(normalizeTextValue(b.name), undefined, { sensitivity: "base" });
+        });
+        return safeProjects;
+    }
+
+    safeProjects.sort(function (a, b) {
+        return getSavedTimestampValue(b) - getSavedTimestampValue(a);
+    });
+    return safeProjects;
+}
+
+function sortSavedStpsByValue(stps, sortValue) {
+    const safeStps = Array.isArray(stps) ? stps.slice() : [];
+
+    if (sortValue === "oldest") {
+        safeStps.sort(function (a, b) {
+            return getSavedTimestampValue(a) - getSavedTimestampValue(b);
+        });
+        return safeStps;
+    }
+
+    if (sortValue === "az") {
+        safeStps.sort(function (a, b) {
+            return normalizeTextValue(a.stpLabel).localeCompare(normalizeTextValue(b.stpLabel), undefined, { sensitivity: "base" });
+        });
+        return safeStps;
+    }
+
+    safeStps.sort(function (a, b) {
+        return getSavedTimestampValue(b) - getSavedTimestampValue(a);
+    });
+    return safeStps;
+}
+
+function updateHeaderCount(element, totalCount, matchedCount) {
+    if (!element) {
+        return;
+    }
+
+    if (totalCount === 0) {
+        element.textContent = "0";
+        return;
+    }
+
+    if (matchedCount === totalCount) {
+        element.textContent = String(totalCount);
+        return;
+    }
+
+    element.textContent = matchedCount + "/" + totalCount;
+}
+
+function handleFilterSearchKeydown(event) {
+    if (event.key !== "Escape") {
+        return;
+    }
+
+    const target = event.target;
+
+    if (!target || target.tagName !== "INPUT") {
+        return;
+    }
+
+    if (!target.value) {
+        return;
+    }
+
+    event.preventDefault();
+    target.value = "";
+
+    if (target === elements.projectSearchInput) {
+        handleProjectFilterInput();
+        return;
+    }
+
+    if (target === elements.savedStpSearchInput) {
+        handleSavedStpFilterInput();
+    }
+}
+
+function matchesProjectFilters(project, searchTerm) {
+    if (!searchTerm) {
+        return true;
+    }
+
+    const projectHaystack = buildSearchHaystack([
+        project.name,
+        project.siteName,
+        project.siteLocation,
+        project.savedAt
+    ]);
+
+    return projectHaystack.includes(searchTerm);
+}
+
+function matchesSavedStpFilters(stp, searchTerm, typeFilter) {
+    const normalizedType = normalizeEntryTypeValue(stp.entryType || "base");
+
+    if (typeFilter !== "all" && normalizedType !== typeFilter) {
+        return false;
+    }
+
+    if (!searchTerm) {
+        return true;
+    }
+
+    const stpHaystack = buildSearchHaystack([
+        stp.stpLabel,
+        stp.siteName,
+        stp.siteLocation,
+        stp.parentStp,
+        stp.supDirection,
+        normalizedType,
+        getEntryTypeLabel(normalizedType)
+    ]);
+
+    return stpHaystack.includes(searchTerm);
+}
+
+function getEntryTypeLabel(entryType) {
+    const normalizedType = normalizeEntryTypeValue(entryType || "base");
+
+    if (normalizedType === "supplemental") {
+        return "Supplemental STP";
+    }
+
+    if (normalizedType === "unit-id") {
+        return "Unit ID";
+    }
+
+    return "Base STP";
+}
+
 function loadSession() {
     const rawSession = localStorage.getItem(storageKey);
 
@@ -389,12 +927,13 @@ function loadSession() {
 
     try {
         const savedSession = JSON.parse(rawSession);
+        const normalizedSession = normalizeImportedSession(savedSession);
 
-        state.siteName = savedSession.siteName || "";
-        state.siteLocation = savedSession.siteLocation || "";
-        state.depthUnit = savedSession.depthUnit || "metric";
-        state.stps = Array.isArray(savedSession.stps) ? savedSession.stps : [];
-        state.projectImage = savedSession.projectImage || "";
+        state.siteName = normalizedSession.siteName;
+        state.siteLocation = normalizedSession.siteLocation;
+        state.depthUnit = normalizedSession.depthUnit;
+        state.stps = normalizedSession.stps;
+        state.projectImage = normalizedSession.projectImage;
     } catch (error) {
         console.warn("Could not load saved session.", error);
     }
@@ -481,6 +1020,26 @@ function renumberStrata() {
 }
 
 function handleStrataListClick(event) {
+    const cameraButton = event.target.closest("[data-photo-capture]");
+
+    if (cameraButton) {
+        const card = cameraButton.closest(".stratum-card");
+
+        if (!card) {
+            return;
+        }
+
+        const cameraInput = card.querySelector('[data-field="cameraPhoto"]');
+
+        if (!cameraInput) {
+            return;
+        }
+
+        cameraInput.value = "";
+        cameraInput.click();
+        return;
+    }
+
     const removePhotoButton = event.target.closest("[data-photo-remove]");
 
     if (removePhotoButton) {
@@ -571,6 +1130,11 @@ function handleStrataListInput(event) {
     if (fieldName === "stratumLabel") {
         const card = field.closest(".stratum-card");
         updatePhotoRuleForCard(card);
+        return;
+    }
+
+    if (fieldName === "depth") {
+        setDepthFieldValidity(field);
     }
 }
 
@@ -608,7 +1172,7 @@ function handleStrataListChange(event) {
 
     const fieldName = field.getAttribute("data-field");
 
-    if (fieldName !== "photos") {
+    if (fieldName !== "photos" && fieldName !== "cameraPhoto") {
         return;
     }
 
@@ -672,6 +1236,72 @@ function buildAutoPhotoName(prefix, sequence, fileName) {
     const safeSequence = Number.isFinite(sequence) ? Math.max(1, sequence) : 1;
     const numberToken = String(safeSequence).padStart(2, "0");
     return prefix + "_" + numberToken + getFileExtension(fileName);
+}
+
+function setDepthFieldValidity(field) {
+    if (!field) {
+        return true;
+    }
+
+    const depthValue = normalizeTextValue(field.value);
+
+    if (!depthValue) {
+        field.setCustomValidity("Enter a depth value like 20 cm.");
+        return false;
+    }
+
+    field.setCustomValidity("");
+    return true;
+}
+
+function validateAllDepthFields() {
+    const depthFields = Array.from(elements.strataList.querySelectorAll('[data-field="depth"]'));
+    let firstInvalidField = null;
+
+    depthFields.forEach(function (field) {
+        const isValid = setDepthFieldValidity(field);
+
+        if (!isValid && !firstInvalidField) {
+            firstInvalidField = field;
+        }
+    });
+
+    return {
+        valid: !firstInvalidField,
+        firstInvalidField: firstInvalidField
+    };
+}
+
+function buildStpUniquenessKey(entryType, stpLabel, supDirection) {
+    const normalizedEntryType = normalizeEntryTypeValue(entryType);
+    const labelToken = sanitizeToken(stpLabel || "");
+
+    if (!labelToken) {
+        return "";
+    }
+
+    if (normalizedEntryType === "supplemental") {
+        return normalizedEntryType + "|" + labelToken + "|" + normalizeSupDirectionValue(supDirection);
+    }
+
+    return normalizedEntryType + "|" + labelToken;
+}
+
+function isDuplicateCurrentStpLabel() {
+    const currentKey = buildStpUniquenessKey(
+        elements.stpEntryType.value,
+        elements.stpLabel.value,
+        elements.supDirection.value
+    );
+
+    if (!currentKey) {
+        return false;
+    }
+
+    return state.stps.some(function (stp) {
+        const existingKey = buildStpUniquenessKey(stp.entryType, stp.stpLabel, stp.supDirection);
+        return existingKey === currentKey;
+    });
 }
 
 function getDisplayStpLabelFromForm() {
@@ -1204,6 +1834,7 @@ function updateStpTypeUi() {
 
     elements.parentStp.disabled = !isSupplemental;
     elements.parentStp.required = isSupplemental;
+    elements.supDirection.disabled = !isSupplemental;
     elements.supDirection.required = isSupplemental;
 
     if (!isSupplemental) {
@@ -1241,6 +1872,16 @@ function resetCurrentStp(shouldFocus) {
 async function saveCurrentStp() {
     updateSiteDraft();
 
+    const depthValidation = validateAllDepthFields();
+    if (!depthValidation.valid) {
+        if (depthValidation.firstInvalidField) {
+            depthValidation.firstInvalidField.focus();
+        }
+
+        elements.entryForm.reportValidity();
+        return;
+    }
+
     if (!elements.entryForm.reportValidity()) {
         return;
     }
@@ -1248,6 +1889,17 @@ async function saveCurrentStp() {
     if (elements.stpEntryType.value === "supplemental" && !elements.parentStp.value) {
         alert("Choose a parent base STP for supplemental entries.");
         elements.parentStp.focus();
+        return;
+    }
+
+    if (isDuplicateCurrentStpLabel()) {
+        if (elements.stpEntryType.value === "supplemental") {
+            alert("This supplemental STP label and Sup direction already exists. Use a different label or direction.");
+        } else {
+            alert("This STP label already exists for the selected entry type. Use a different label.");
+        }
+
+        elements.stpLabel.focus();
         return;
     }
 
@@ -1332,17 +1984,40 @@ async function collectCurrentStp() {
 
 function renderSavedStps() {
     elements.savedStpList.innerHTML = "";
+    const searchTerm = getSavedStpSearchTerm();
+    const typeFilter = getSavedStpTypeFilterValue();
+    const sortValue = getSavedStpSortValue();
+    const hasActiveFilters = Boolean(searchTerm) || typeFilter !== "all" || sortValue !== "newest";
+    updateHeaderCount(elements.savedStpHeaderCount, state.stps.length, state.stps.length);
 
     if (state.stps.length === 0) {
+        updateSavedStpFilterSummary(0, 0, searchTerm, typeFilter, sortValue);
         elements.savedEmptyState.hidden = false;
+        elements.savedEmptyState.textContent = "No STPs saved yet.";
         elements.sessionStatus.textContent = "0 STPs saved";
         return;
     }
 
-    elements.savedEmptyState.hidden = true;
     elements.sessionStatus.textContent = state.stps.length + (state.stps.length === 1 ? " STP saved" : " STPs saved");
+    const filteredStps = state.stps.filter(function (stp) {
+        return matchesSavedStpFilters(stp, searchTerm, typeFilter);
+    });
+    const sortedStps = sortSavedStpsByValue(filteredStps, sortValue);
+    updateHeaderCount(elements.savedStpHeaderCount, state.stps.length, sortedStps.length);
+    updateSavedStpFilterSummary(state.stps.length, sortedStps.length, searchTerm, typeFilter, sortValue);
 
-    state.stps.forEach(function (stp) {
+    if (sortedStps.length === 0) {
+        elements.savedEmptyState.hidden = false;
+        elements.savedEmptyState.textContent = hasActiveFilters
+            ? "No saved STPs match the current search/filter."
+            : "No STPs saved yet.";
+        return;
+    }
+
+    elements.savedEmptyState.hidden = true;
+    elements.savedEmptyState.textContent = "No STPs saved yet.";
+
+    sortedStps.forEach(function (stp) {
         const card = document.createElement("article");
         card.className = "saved-stp";
 
@@ -1351,19 +2026,20 @@ function renderSavedStps() {
 
         const titleWrap = document.createElement("div");
         const title = document.createElement("h3");
-        title.textContent = stp.stpLabel;
+        setHighlightedText(title, stp.stpLabel, searchTerm);
 
         const meta = document.createElement("p");
         meta.className = "saved-stp-meta";
 
-        const type = stp.entryType || "base";
+        const type = getEntryTypeLabel(stp.entryType);
         const supDisplay = stp.supDirection ? (" | Sup " + stp.supDirection) : "";
         const parentDisplay = stp.parentStp ? (" | Parent " + stp.parentStp) : "";
         const gpsDisplay = (stp.gpsLatitude || stp.gpsLongitude)
             ? (" | GPS " + (stp.gpsLatitude || "-") + ", " + (stp.gpsLongitude || "-"))
             : "";
 
-        meta.textContent = stp.siteName + " | " + stp.siteLocation + " | " + type + parentDisplay + supDisplay + gpsDisplay + " | " + (stp.depthUnit || "metric") + " | " + stp.strata.length + (stp.strata.length === 1 ? " stratum" : " strata");
+        const metaText = stp.siteName + " | " + stp.siteLocation + " | " + type + parentDisplay + supDisplay + gpsDisplay + " | " + (stp.depthUnit || "metric") + " | " + stp.strata.length + (stp.strata.length === 1 ? " stratum" : " strata");
+        setHighlightedText(meta, metaText, searchTerm);
 
         titleWrap.appendChild(title);
         titleWrap.appendChild(meta);
@@ -1449,13 +2125,13 @@ function suggestNextStpLabel(label) {
 function applyDepthUnitUi() {
     const unit = elements.depthUnit.value;
     const placeholderMap = {
-        metric: "0-20 cm",
-        standard: "0-8 in",
-        "engineering-feet": "0.00 ft"
+        metric: "20 cm",
+        standard: "8 in",
+        "engineering-feet": "1.00 ft"
     };
 
     elements.strataList.querySelectorAll('[data-field="depth"]').forEach(function (field) {
-        field.placeholder = placeholderMap[unit] || "0-20 cm";
+        field.placeholder = placeholderMap[unit] || "20 cm";
     });
 }
 
@@ -1700,6 +2376,71 @@ function downloadSessionData() {
     URL.revokeObjectURL(downloadUrl);
 }
 
+function requestImportSessionFile() {
+    elements.importJsonInput.value = "";
+    elements.importJsonInput.click();
+}
+
+function handleImportSessionFile() {
+    const file = elements.importJsonInput.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    const reader = new FileReader();
+
+    reader.addEventListener("load", async function () {
+        try {
+            const rawText = String(reader.result || "");
+            const parsedData = JSON.parse(rawText);
+            const importedSession = normalizeImportedSession(parsedData);
+
+            if (!confirm("Import this JSON backup and replace the current session?")) {
+                return;
+            }
+
+            const removedPhotoIds = collectPhotoIdsFromStps(state.stps);
+
+            state.siteName = importedSession.siteName;
+            state.siteLocation = importedSession.siteLocation;
+            state.depthUnit = importedSession.depthUnit;
+            state.stps = importedSession.stps;
+            state.projectImage = importedSession.projectImage;
+
+            if (!saveSession()) {
+                alert("Imported session could not be saved in browser storage.");
+                return;
+            }
+
+            populateSiteFields();
+            refreshParentStpOptions();
+            renderSavedStps();
+            renderProjectBanner();
+            resetCurrentStp(false);
+            setProjectImageMessage("Imported session backup: " + file.name, false);
+
+            try {
+                await cleanupDeletedPhotoIds(removedPhotoIds);
+            } catch (cleanupError) {
+                console.warn("Could not clean up replaced session photos.", cleanupError);
+            }
+        } catch (error) {
+            console.warn("Could not import JSON backup.", error);
+            alert("Could not import JSON backup. Confirm the file is a valid session export.");
+        } finally {
+            elements.importJsonInput.value = "";
+        }
+    });
+
+    reader.addEventListener("error", function () {
+        elements.importJsonInput.value = "";
+        alert("The selected JSON file could not be read.");
+    });
+
+    reader.readAsText(file);
+}
+
 async function clearSession() {
     if (!confirm("Clear the saved STP session and start over?")) {
         return;
@@ -1873,16 +2614,32 @@ async function deleteProject(projectId) {
 
 function renderProjects() {
     const projects = loadProjectsStore();
+    const searchTerm = getProjectSearchTerm();
+    const sortValue = getProjectSortValue();
+    const filteredProjects = projects.filter(function (project) {
+        return matchesProjectFilters(project, searchTerm);
+    });
+    const sortedProjects = sortProjectsByValue(filteredProjects, sortValue);
+    updateHeaderCount(elements.projectsHeaderCount, projects.length, sortedProjects.length);
+    updateProjectFilterSummary(projects.length, sortedProjects.length, searchTerm, sortValue);
     elements.projectsList.innerHTML = "";
 
     if (projects.length === 0) {
         elements.projectsEmptyState.hidden = false;
+        elements.projectsEmptyState.textContent = "No saved projects yet.";
+        return;
+    }
+
+    if (sortedProjects.length === 0) {
+        elements.projectsEmptyState.hidden = false;
+        elements.projectsEmptyState.textContent = "No projects match your search.";
         return;
     }
 
     elements.projectsEmptyState.hidden = true;
+    elements.projectsEmptyState.textContent = "No saved projects yet.";
 
-    projects.slice().reverse().forEach(function (project) {
+    sortedProjects.forEach(function (project) {
         const card = document.createElement("article");
         card.className = "saved-stp";
 
@@ -1891,7 +2648,7 @@ function renderProjects() {
 
         const titleWrap = document.createElement("div");
         const title = document.createElement("h3");
-        title.textContent = project.name;
+        setHighlightedText(title, project.name, searchTerm);
 
         const meta = document.createElement("p");
         meta.className = "saved-stp-meta";
@@ -1903,7 +2660,7 @@ function renderProjects() {
             stpCount + (stpCount === 1 ? " STP" : " STPs"),
             savedDate
         ].filter(Boolean);
-        meta.textContent = metaParts.join(" | ");
+        setHighlightedText(meta, metaParts.join(" | "), searchTerm);
 
         titleWrap.appendChild(title);
         titleWrap.appendChild(meta);
