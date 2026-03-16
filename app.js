@@ -6,6 +6,7 @@ const importQualityModeStorageKey = "archaeolab-import-quality-mode-v1";
 const maxProjectImageSizeBytes = 4 * 1024 * 1024;
 const maxReferencePhotoSizeBytes = 4 * 1024 * 1024;
 const maxImageSourceSizeBytes = 20 * 1024 * 1024;
+const defaultReferencePhotoSrc = "IMG_3376.JPG";
 const importQualityProfiles = {
     balanced: {
         maxDimension: 2600,
@@ -3011,6 +3012,71 @@ async function createCompatibleImagePayload(file, maxBytes, qualityMode) {
     };
 }
 
+function getStorageFallbackByteTargets(maxBytes) {
+    const minimumTargetBytes = 900 * 1024;
+    const fallbackFactors = [0.8, 0.65, 0.52, 0.4, 0.32];
+    const targets = [];
+
+    fallbackFactors.forEach(function (factor) {
+        const nextTarget = Math.max(minimumTargetBytes, Math.floor(maxBytes * factor));
+        if (nextTarget >= maxBytes) {
+            return;
+        }
+
+        if (targets.length > 0 && nextTarget >= targets[targets.length - 1]) {
+            return;
+        }
+
+        targets.push(nextTarget);
+    });
+
+    return targets;
+}
+
+async function persistImageWithStorageFallback(options) {
+    const file = options.file;
+    const maxBytes = options.maxBytes;
+    const qualityMode = options.qualityMode;
+    const previousDataUrl = String(options.previousDataUrl || "");
+    const setImageState = options.setImageState;
+
+    let payload = options.initialPayload;
+    let usedStorageFallback = false;
+    const fallbackTargets = getStorageFallbackByteTargets(maxBytes);
+
+    for (let attemptIndex = 0; attemptIndex <= fallbackTargets.length; attemptIndex += 1) {
+        setImageState(payload.dataUrl);
+
+        if (saveSession()) {
+            return {
+                saved: true,
+                payload: payload,
+                usedStorageFallback: usedStorageFallback
+            };
+        }
+
+        if (attemptIndex === fallbackTargets.length) {
+            break;
+        }
+
+        usedStorageFallback = true;
+
+        try {
+            payload = await createCompatibleImagePayload(file, fallbackTargets[attemptIndex], qualityMode);
+        } catch (error) {
+            break;
+        }
+    }
+
+    setImageState(previousDataUrl);
+
+    return {
+        saved: false,
+        payload: options.initialPayload,
+        usedStorageFallback: usedStorageFallback
+    };
+}
+
 function setReferencePhotoMessage(text, isError) {
     if (!elements.referencePhotoMessage) {
         return;
@@ -3024,12 +3090,12 @@ function renderReferencePhoto() {
     const hasPhoto = Boolean(state.referencePhoto);
 
     if (elements.referencePhotoImg) {
-        elements.referencePhotoImg.hidden = !hasPhoto;
-        elements.referencePhotoImg.src = hasPhoto ? state.referencePhoto : "";
+        elements.referencePhotoImg.hidden = false;
+        elements.referencePhotoImg.src = hasPhoto ? state.referencePhoto : defaultReferencePhotoSrc;
     }
 
     if (elements.referencePhotoEmpty) {
-        elements.referencePhotoEmpty.hidden = hasPhoto;
+        elements.referencePhotoEmpty.hidden = true;
     }
 
     if (elements.clearReferencePhotoButton) {
@@ -3057,7 +3123,7 @@ function clearReferencePhoto(showMessage) {
     }
 
     renderReferencePhoto();
-    setReferencePhotoMessage(showMessage ? "Reference photo removed." : "", false);
+    setReferencePhotoMessage(showMessage ? "Reference photo removed. Showing stock reference image." : "", false);
 }
 
 function openReferencePhotoPicker() {
@@ -3124,15 +3190,26 @@ async function handleReferencePhotoUpload() {
     }
 
     const previousPhoto = state.referencePhoto;
-    state.referencePhoto = imagePayload.dataUrl;
+    const persistence = await persistImageWithStorageFallback({
+        file: file,
+        maxBytes: maxReferencePhotoSizeBytes,
+        qualityMode: activeQualityMode,
+        previousDataUrl: previousPhoto,
+        initialPayload: imagePayload,
+        setImageState: function (dataUrl) {
+            state.referencePhoto = dataUrl;
+        }
+    });
 
-    if (!saveSession()) {
+    if (!persistence.saved) {
         state.referencePhoto = previousPhoto;
         renderReferencePhoto();
-        setReferencePhotoMessage("Reference photo could not be saved. Use a smaller image.", true);
+        setReferencePhotoMessage("Reference photo could not be saved. Use a smaller image or clear older photos.", true);
         elements.referencePhotoInput.value = "";
         return;
     }
+
+    imagePayload = persistence.payload;
 
     renderReferencePhoto();
     if (imagePayload.wasResized) {
@@ -3145,7 +3222,8 @@ async function handleReferencePhotoUpload() {
                 + bytesToMegabytesText(imagePayload.outputBytes)
                 + " MB, "
                 + getImportQualityModeLabel(imagePayload.qualityMode)
-                + " mode).",
+                + " mode)."
+                + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : ""),
             false
         );
         return;
@@ -3158,7 +3236,8 @@ async function handleReferencePhotoUpload() {
             + bytesToMegabytesText(imagePayload.outputBytes)
             + " MB, "
             + getImportQualityModeLabel(imagePayload.qualityMode)
-            + " mode).",
+            + " mode)."
+            + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : ""),
         false
     );
 }
@@ -3287,15 +3366,26 @@ async function handleProjectImageUpload() {
     }
 
     const previousImage = state.projectImage;
-    state.projectImage = imagePayload.dataUrl;
+    const persistence = await persistImageWithStorageFallback({
+        file: file,
+        maxBytes: maxProjectImageSizeBytes,
+        qualityMode: activeQualityMode,
+        previousDataUrl: previousImage,
+        initialPayload: imagePayload,
+        setImageState: function (dataUrl) {
+            state.projectImage = dataUrl;
+        }
+    });
 
-    if (!saveSession()) {
+    if (!persistence.saved) {
         state.projectImage = previousImage;
         renderProjectBanner();
-        setProjectImageMessage("Image could not be saved. Use a smaller file.", true);
+        setProjectImageMessage("Image could not be saved. Use a smaller file or clear older photos.", true);
         elements.projectImageInput.value = "";
         return;
     }
+
+    imagePayload = persistence.payload;
 
     renderProjectBanner();
     if (imagePayload.wasResized) {
@@ -3308,7 +3398,9 @@ async function handleProjectImageUpload() {
                 + bytesToMegabytesText(imagePayload.outputBytes)
                 + " MB, "
                 + getImportQualityModeLabel(imagePayload.qualityMode)
-                + " mode). Use View Map Full Screen to expand it.",
+                + " mode)."
+                + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : "")
+                + " Use View Map Full Screen to expand it.",
             false
         );
         return;
@@ -3321,7 +3413,9 @@ async function handleProjectImageUpload() {
             + bytesToMegabytesText(imagePayload.outputBytes)
             + " MB, "
             + getImportQualityModeLabel(imagePayload.qualityMode)
-            + " mode). Use View Map Full Screen to expand it.",
+            + " mode)."
+            + (persistence.usedStorageFallback ? " Reduced further to fit browser storage." : "")
+            + " Use View Map Full Screen to expand it.",
         false
     );
 }
