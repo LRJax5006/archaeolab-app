@@ -438,6 +438,7 @@ function cacheElements() {
     elements.resetCurrentButton = document.getElementById("resetCurrentButton");
     elements.exportXlsxButton = document.getElementById("exportXlsxButton");
     elements.exportCsvButton = document.getElementById("exportCsvButton");
+    elements.viewGpsMapButton = document.getElementById("viewGpsMapButton");
     elements.exportJsonButton = document.getElementById("exportJsonButton");
     elements.importJsonButton = document.getElementById("importJsonButton");
     elements.importJsonInput = document.getElementById("importJsonInput");
@@ -495,6 +496,9 @@ function bindEvents() {
     });
     elements.exportXlsxButton.addEventListener("click", downloadExcelReadyXlsx);
     elements.exportCsvButton.addEventListener("click", downloadExcelReadyCsv);
+    if (elements.viewGpsMapButton) {
+        elements.viewGpsMapButton.addEventListener("click", openGpsPointsMap);
+    }
     elements.exportJsonButton.addEventListener("click", downloadSessionData);
     elements.importJsonButton.addEventListener("click", requestImportSessionFile);
     elements.importJsonInput.addEventListener("change", handleImportSessionFile);
@@ -3037,6 +3041,7 @@ function renderSavedStps() {
     const sortValue = getSavedStpSortValue();
     const hasActiveFilters = Boolean(searchTerm) || typeFilter !== "all" || sortValue !== "newest";
     updateHeaderCount(elements.savedStpHeaderCount, state.stps.length, state.stps.length);
+    updateGpsMapButtonState();
 
     if (state.stps.length === 0) {
         updateSavedStpFilterSummary(0, 0, searchTerm, typeFilter, sortValue);
@@ -4573,6 +4578,187 @@ function handleMapViewerEscape(event) {
     if (event.key === "Escape") {
         closeMapViewer();
     }
+}
+
+function parseGpsCoordinate(value, min, max) {
+    const parsedValue = Number(normalizeTextValue(value));
+
+    if (!Number.isFinite(parsedValue)) {
+        return null;
+    }
+
+    if (parsedValue < min || parsedValue > max) {
+        return null;
+    }
+
+    return parsedValue;
+}
+
+function getSavedGpsPointsForMap() {
+    const gpsPoints = [];
+
+    state.stps.forEach(function (stp, index) {
+        const latitude = parseGpsCoordinate(stp.gpsLatitude, -90, 90);
+        const longitude = parseGpsCoordinate(stp.gpsLongitude, -180, 180);
+
+        if (latitude == null || longitude == null) {
+            return;
+        }
+
+        const baseLabel = normalizeTextValue(stp.stpLabel) || ("STP " + (index + 1));
+        const supDirection = normalizeTextValue(stp.supDirection);
+        const entryTypeKey = normalizeEntryTypeValue(stp.entryType);
+
+        gpsPoints.push({
+            label: supDirection ? (baseLabel + supDirection) : baseLabel,
+            entryTypeKey: entryTypeKey,
+            entryTypeLabel: getEntryTypeLabel(entryTypeKey),
+            latitude: latitude,
+            longitude: longitude,
+            savedAt: normalizeTextValue(stp.savedAt),
+            siteName: normalizeTextValue(stp.siteName || state.siteName),
+            siteLocation: normalizeTextValue(stp.siteLocation || state.siteLocation)
+        });
+    });
+
+    return gpsPoints;
+}
+
+function updateGpsMapButtonState() {
+    if (!elements.viewGpsMapButton) {
+        return;
+    }
+
+    const pointCount = getSavedGpsPointsForMap().length;
+    elements.viewGpsMapButton.disabled = pointCount === 0;
+    elements.viewGpsMapButton.title = pointCount === 0
+        ? "Save at least one STP with valid GPS coordinates to open the map."
+        : "Open map with " + pointCount + (pointCount === 1 ? " plotted GPS point." : " plotted GPS points.");
+}
+
+function openGpsPointsMap() {
+    const gpsPoints = getSavedGpsPointsForMap();
+
+    if (gpsPoints.length === 0) {
+        alert("Save at least one STP with valid GPS coordinates before opening the map.");
+        return;
+    }
+
+    const mapWindow = window.open("", "_blank");
+    const pageTitle = (state.siteName || "Project") + " GPS Points Map";
+
+    if (!mapWindow) {
+        alert("Popup blocked. Allow popups to open the GPS points map.");
+        return;
+    }
+
+    const viewerMarkup = [
+        "<!DOCTYPE html>",
+        "<html lang=\"en\">",
+        "<head>",
+        "<meta charset=\"utf-8\">",
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">",
+        "<title>GPS Points Map</title>",
+        "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\">",
+        "<style>",
+        "*{box-sizing:border-box}",
+        "body{margin:0;min-height:100vh;background:#f2ecdf;color:#1f2b26;font-family:Trebuchet MS,Gill Sans,sans-serif;display:grid;grid-template-rows:auto 1fr}",
+        ".top{padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:#b21e1e;color:#fff}",
+        ".title{margin:0;font-size:1rem;font-weight:700;letter-spacing:0.01em}",
+        "button{border:none;border-radius:999px;padding:10px 14px;font:inherit;font-weight:700;cursor:pointer;background:#f4b63e;color:#352005}",
+        ".layout{padding:12px;display:grid;gap:10px;grid-template-rows:minmax(320px,62vh) auto auto auto}",
+        ".map-canvas{width:100%;height:100%;border-radius:12px;border:1px solid rgba(0,0,0,0.2);overflow:hidden;background:#ddd}",
+        ".map-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}",
+        ".map-toggle{display:inline-flex;align-items:center;gap:8px;font-size:0.92rem;font-weight:700;color:#1f2b26}",
+        ".map-toggle input{accent-color:#b21e1e}",
+        ".map-legend{display:flex;align-items:center;gap:10px;flex-wrap:wrap}",
+        ".legend-item{display:inline-flex;align-items:center;gap:6px;font-size:0.84rem;font-weight:700;color:#2b3a34}",
+        ".legend-dot{width:12px;height:12px;border-radius:999px;border:2px solid transparent;display:inline-block}",
+        ".status{margin:0;font-size:0.95rem;color:#2e3a35}",
+        ".status.error{color:#8b1f1f}",
+        ".list-title{margin:0;font-size:0.95rem;font-weight:700}",
+        ".point-list{margin:0;padding:0 0 0 20px;display:grid;gap:6px;max-height:26vh;overflow:auto}",
+        ".point-list li{font-size:0.9rem}",
+        "</style>",
+        "</head>",
+        "<body>",
+        "<div class=\"top\"><p id=\"gpsMapTitle\" class=\"title\">GPS Points Map</p><button type=\"button\" onclick=\"window.close()\">Close</button></div>",
+        "<main class=\"layout\">",
+        "<div id=\"gpsMapCanvas\" class=\"map-canvas\" role=\"img\" aria-label=\"Map with plotted GPS points\"></div>",
+        "<div class=\"map-controls\">",
+        "<label class=\"map-toggle\"><input type=\"checkbox\" id=\"connectPointsToggle\"> Connect points in save order</label>",
+        "<div id=\"gpsTypeLegend\" class=\"map-legend\" aria-label=\"Point type legend\"></div>",
+        "</div>",
+        "<p id=\"gpsMapStatus\" class=\"status\">Loading map...</p>",
+        "<h2 class=\"list-title\">Plotted Points</h2>",
+        "<ol id=\"gpsPointList\" class=\"point-list\"></ol>",
+        "</main>",
+        "<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>",
+        "<script>",
+        "(function(){",
+        "var mapInstance = null;",
+        "var markerLayer = null;",
+        "var routeLayer = null;",
+        "var activePoints = [];",
+        "var toggleBound = false;",
+        "function toText(value){return String(value == null ? '' : value);}",
+        "function escapeHtml(value){return toText(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;');}",
+        "function formatSavedAt(value){if(!value){return '';}var parsed = new Date(value);if(Number.isNaN(parsed.getTime())){return value;}return parsed.toLocaleString();}",
+        "function setStatus(text,isError){var statusEl=document.getElementById('gpsMapStatus');if(!statusEl){return;}statusEl.textContent=text||'';statusEl.className=isError?'status error':'status';}",
+        "function normalizeTypeKey(value){var key=toText(value).toLowerCase().trim();if(key==='supplemental'||key==='unit-id'||key==='base'){return key;}if(key.indexOf('supplemental')!==-1){return 'supplemental';}if(key.indexOf('unit')!==-1){return 'unit-id';}return 'base';}",
+        "function getTypeStyle(typeKey){if(typeKey==='supplemental'){return {fill:'#f4b63e',stroke:'#8f6000',label:'Supplemental STP'};}if(typeKey==='unit-id'){return {fill:'#2d8f84',stroke:'#14554f',label:'Unit ID'};}return {fill:'#b21e1e',stroke:'#5f0f0f',label:'Base STP'};}",
+        "function renderTypeLegend(){var legend=document.getElementById('gpsTypeLegend');if(!legend){return;}legend.innerHTML='';['base','supplemental','unit-id'].forEach(function(typeKey){var style=getTypeStyle(typeKey);var item=document.createElement('span');item.className='legend-item';var dot=document.createElement('span');dot.className='legend-dot';dot.style.backgroundColor=style.fill;dot.style.borderColor=style.stroke;var text=document.createElement('span');text.textContent=style.label;item.appendChild(dot);item.appendChild(text);legend.appendChild(item);});}",
+        "function renderPointList(points){var list=document.getElementById('gpsPointList');if(!list){return;}list.innerHTML='';points.forEach(function(point,index){var item=document.createElement('li');var label=point.label||('Point '+(index+1));var typeLabel=point.entryTypeLabel||getTypeStyle(point.entryTypeKey).label;item.textContent=label+' | '+typeLabel+' | '+point.latitude.toFixed(6)+', '+point.longitude.toFixed(6);list.appendChild(item);});}",
+        "function ensureMap(){if(typeof window.L==='undefined'){setStatus('Map tiles could not load. Check internet connection. Coordinates are listed below.',true);return false;}if(!mapInstance){mapInstance=window.L.map('gpsMapCanvas',{zoomControl:true});window.L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(mapInstance);markerLayer=window.L.layerGroup().addTo(mapInstance);routeLayer=window.L.layerGroup().addTo(mapInstance);}return true;}",
+        "function renderMapLayers(){if(!ensureMap()){return;}markerLayer.clearLayers();routeLayer.clearLayers();var bounds=[];var lineCoordinates=[];activePoints.forEach(function(point,index){var typeStyle=getTypeStyle(point.entryTypeKey);var marker=window.L.circleMarker([point.latitude,point.longitude],{radius:8,color:typeStyle.stroke,weight:2,fillColor:typeStyle.fill,fillOpacity:0.93}).addTo(markerLayer);var typeLabel=point.entryTypeLabel||typeStyle.label;var popupHtml='<strong>'+escapeHtml(point.label||('Point '+(index+1)))+'</strong><br>'+'<span>'+escapeHtml(typeLabel)+'</span><br>'+'<span>'+point.latitude.toFixed(6)+', '+point.longitude.toFixed(6)+'</span>'+(point.savedAt?'<br><span>Saved '+escapeHtml(formatSavedAt(point.savedAt))+'</span>':'');marker.bindPopup(popupHtml);bounds.push([point.latitude,point.longitude]);lineCoordinates.push([point.latitude,point.longitude]);});var connectToggle=document.getElementById('connectPointsToggle');var connectEnabled=Boolean(connectToggle&&connectToggle.checked);if(connectEnabled&&lineCoordinates.length>1){window.L.polyline(lineCoordinates,{color:'#243f3a',weight:3,opacity:0.75,dashArray:'8 6'}).addTo(routeLayer);}if(bounds.length===1){mapInstance.setView(bounds[0],17);}else{mapInstance.fitBounds(bounds,{padding:[28,28]});}setTimeout(function(){if(mapInstance){mapInstance.invalidateSize();}},120);var pointSummary=activePoints.length+(activePoints.length===1?' GPS point plotted.':' GPS points plotted.');var pathSummary=connectEnabled?' Connected path on.':' Connected path off.';setStatus(pointSummary+pathSummary,false);}",
+        "function bindToggle(){if(toggleBound){return;}var connectToggle=document.getElementById('connectPointsToggle');if(!connectToggle){return;}connectToggle.addEventListener('change',function(){renderMapLayers();});toggleBound=true;}",
+        "window.renderGpsPointsMap = function(payload){",
+        "var points=Array.isArray(payload&&payload.points)?payload.points:[];",
+        "var titleText=toText(payload&&payload.title?payload.title:'GPS Points Map');",
+        "document.title=titleText;",
+        "var titleElement=document.getElementById('gpsMapTitle');",
+        "if(titleElement){titleElement.textContent=titleText;}",
+        "activePoints=points.map(function(point,index){var latitude=Number(point&&point.latitude);var longitude=Number(point&&point.longitude);if(!Number.isFinite(latitude)||!Number.isFinite(longitude)){return null;}var typeKey=normalizeTypeKey(point&&point.entryTypeKey||point&&point.entryTypeLabel||point&&point.entryType);var typeLabel=toText(point&&point.entryTypeLabel)||getTypeStyle(typeKey).label;return {label:toText(point&&point.label)||('Point '+(index+1)),entryTypeKey:typeKey,entryTypeLabel:typeLabel,latitude:latitude,longitude:longitude,savedAt:toText(point&&point.savedAt)};}).filter(Boolean);",
+        "renderTypeLegend();",
+        "renderPointList(activePoints);",
+        "bindToggle();",
+        "if(activePoints.length===0){setStatus('No valid GPS points found.',true);return;}",
+        "renderMapLayers();",
+        "};",
+        "})();",
+        "</script>",
+        "</body>",
+        "</html>"
+    ].join("");
+
+    mapWindow.document.open();
+    mapWindow.document.write(viewerMarkup);
+    mapWindow.document.close();
+
+    const payload = {
+        title: pageTitle,
+        points: gpsPoints
+    };
+    let attempts = 0;
+
+    function handoffPayload() {
+        if (mapWindow.closed) {
+            return;
+        }
+
+        if (typeof mapWindow.renderGpsPointsMap === "function") {
+            mapWindow.renderGpsPointsMap(payload);
+            return;
+        }
+
+        attempts += 1;
+
+        if (attempts < 80) {
+            setTimeout(handoffPayload, 50);
+        }
+    }
+
+    handoffPayload();
 }
 
 function openImageInModal(imageSource, titleText, shouldRevokeOnClose) {
