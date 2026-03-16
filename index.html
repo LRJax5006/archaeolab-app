@@ -25,7 +25,7 @@
             </div>
         </div>
         <div class="project-banner-meta" aria-live="polite">
-            <p class="project-banner-help">Accepted files: JPG, PNG, WEBP up to 3 MB.</p>
+            <p class="project-banner-help">Accepted files: JPG, PNG, WEBP up to 4 MB.</p>
             <p id="projectImageMessage" class="project-banner-message" aria-live="polite"></p>
         </div>
 
@@ -46,6 +46,7 @@
                     <button type="button" id="saveProjectButton" class="secondary-button">Save Project &amp; Start New</button>
                     <button type="button" id="clearSessionButton" class="ghost-button">Clear Session</button>
                     <button type="button" id="highContrastToggle" class="ghost-button contrast-toggle" aria-pressed="false">High Contrast: Off</button>
+                    <button type="button" id="importQualityToggle" class="ghost-button contrast-toggle" aria-pressed="true">Import Quality: Sharp</button>
                 </div>
             </div>
         </header>
@@ -195,12 +196,22 @@
 
                     <aside class="panel entry-photo-panel" aria-label="Field reference photo">
                         <div class="entry-photo-media">
-                            <img class="entry-photo-img" src="IMG_3376.JPG" alt="Field photo beside the STP data entry area" loading="lazy">
+                            <img id="referencePhotoImg" class="entry-photo-img" alt="Reference photo beside the STP data entry area" loading="lazy" hidden>
+                            <div id="referencePhotoEmpty" class="entry-photo-empty">
+                                <p>Open a recent photo or choose one from your storage.</p>
+                            </div>
                         </div>
                         <div class="entry-photo-copy">
                             <p class="eyebrow">Field Reference</p>
-                            <h2>STP Entry Photo</h2>
+                            <h2>Reference Photo</h2>
                             <p>Keep a field image visible while entering site details, strata descriptions, and notes.</p>
+                            <div class="entry-photo-actions">
+                                <button type="button" id="openReferencePhotoButton" class="secondary-button">Open Reference Photo</button>
+                                <button type="button" id="clearReferencePhotoButton" class="ghost-button" hidden>Clear</button>
+                            </div>
+                            <input type="file" id="referencePhotoInput" accept="image/*" hidden>
+                            <p id="referencePhotoMessage" class="entry-photo-message" aria-live="polite"></p>
+                            <p id="referencePhotoSavedHint" class="entry-photo-saved-hint" hidden>Saved with session and project.</p>
                         </div>
                     </aside>
                 </div>

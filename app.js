@@ -2,7 +2,36 @@ const storageKey = "archaeolab-stp-session-v1";
 const projectsStorageKey = "archaeolab-projects-v1";
 const filterStorageKey = "archaeolab-ui-filters-v1";
 const contrastModeStorageKey = "archaeolab-contrast-mode-v1";
-const maxProjectImageSizeBytes = 3 * 1024 * 1024;
+const importQualityModeStorageKey = "archaeolab-import-quality-mode-v1";
+const maxProjectImageSizeBytes = 4 * 1024 * 1024;
+const maxReferencePhotoSizeBytes = 4 * 1024 * 1024;
+const maxImageSourceSizeBytes = 20 * 1024 * 1024;
+const importQualityProfiles = {
+    balanced: {
+        maxDimension: 2600,
+        initialQuality: 0.88,
+        minQuality: 0.62,
+        maxAttempts: 10,
+        qualityStep: 0.08,
+        oversizeHardThreshold: 1.9,
+        oversizeSoftThreshold: 1.25,
+        downscaleHardFactor: 0.8,
+        downscaleSoftFactor: 0.88,
+        downscaleFinalFactor: 0.93
+    },
+    sharp: {
+        maxDimension: 3200,
+        initialQuality: 0.94,
+        minQuality: 0.72,
+        maxAttempts: 14,
+        qualityStep: 0.04,
+        oversizeHardThreshold: 2.1,
+        oversizeSoftThreshold: 1.4,
+        downscaleHardFactor: 0.84,
+        downscaleSoftFactor: 0.9,
+        downscaleFinalFactor: 0.95
+    }
+};
 const supportedProjectImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const supportedProjectImageExtensions = [".jpg", ".jpeg", ".png", ".webp"];
 const validDepthUnits = ["metric", "standard", "engineering-feet"];
@@ -13,6 +42,7 @@ const photoDatabaseVersion = 1;
 const draftPhotoBlobs = new Map();
 
 let photoDatabasePromise;
+let importQualityMode = "sharp";
 
 const dropdownOptions = {
     munsell: [
@@ -255,7 +285,8 @@ const state = {
     siteLocation: "",
     depthUnit: "metric",
     stps: [],
-    projectImage: ""
+    projectImage: "",
+    referencePhoto: ""
 };
 
 const elements = {};
@@ -265,6 +296,7 @@ document.addEventListener("DOMContentLoaded", initializeApp);
 function initializeApp() {
     cacheElements();
     loadContrastMode();
+    loadImportQualityMode();
     populateDropdownDatalists();
     bindEvents();
     loadSession();
@@ -275,6 +307,7 @@ function initializeApp() {
     renderSavedStps();
     renderProjects();
     renderProjectBanner();
+    renderReferencePhoto();
     resetCurrentStp(false);
 }
 
@@ -304,6 +337,7 @@ function cacheElements() {
     elements.importJsonInput = document.getElementById("importJsonInput");
     elements.clearSessionButton = document.getElementById("clearSessionButton");
     elements.highContrastToggle = document.getElementById("highContrastToggle");
+    elements.importQualityToggle = document.getElementById("importQualityToggle");
     elements.suggestLabelButton = document.getElementById("suggestLabelButton");
     elements.saveProjectButton = document.getElementById("saveProjectButton");
     elements.projectsEmptyState = document.getElementById("projectsEmptyState");
@@ -325,6 +359,13 @@ function cacheElements() {
     elements.openProjectImageButton = document.getElementById("openProjectImageButton");
     elements.removeProjectImageButton = document.getElementById("removeProjectImageButton");
     elements.projectImageMessage = document.getElementById("projectImageMessage");
+    elements.referencePhotoImg = document.getElementById("referencePhotoImg");
+    elements.referencePhotoEmpty = document.getElementById("referencePhotoEmpty");
+    elements.referencePhotoInput = document.getElementById("referencePhotoInput");
+    elements.openReferencePhotoButton = document.getElementById("openReferencePhotoButton");
+    elements.clearReferencePhotoButton = document.getElementById("clearReferencePhotoButton");
+    elements.referencePhotoMessage = document.getElementById("referencePhotoMessage");
+    elements.referencePhotoSavedHint = document.getElementById("referencePhotoSavedHint");
     elements.mapViewerModal = document.getElementById("mapViewerModal");
     elements.mapViewerImage = document.getElementById("mapViewerImage");
     elements.closeMapViewerButton = document.getElementById("closeMapViewerButton");
@@ -350,11 +391,27 @@ function bindEvents() {
         elements.highContrastToggle.addEventListener("click", handleContrastToggle);
     }
 
+    if (elements.importQualityToggle) {
+        elements.importQualityToggle.addEventListener("click", handleImportQualityToggle);
+    }
+
     elements.suggestLabelButton.addEventListener("click", suggestFromCurrentInput);
     elements.saveProjectButton.addEventListener("click", saveProjectAndStartNew);
     elements.projectImageInput.addEventListener("change", handleProjectImageUpload);
     elements.openProjectImageButton.addEventListener("click", openMapViewer);
     elements.removeProjectImageButton.addEventListener("click", removeProjectImage);
+
+    if (elements.openReferencePhotoButton && elements.referencePhotoInput) {
+        elements.openReferencePhotoButton.addEventListener("click", openReferencePhotoPicker);
+        elements.referencePhotoInput.addEventListener("change", handleReferencePhotoUpload);
+    }
+
+    if (elements.clearReferencePhotoButton) {
+        elements.clearReferencePhotoButton.addEventListener("click", function () {
+            clearReferencePhoto(true);
+        });
+    }
+
     elements.closeMapViewerButton.addEventListener("click", closeMapViewer);
     elements.mapViewerModal.addEventListener("click", handleMapViewerClick);
     document.addEventListener("keydown", handleMapViewerEscape);
@@ -511,7 +568,10 @@ function normalizeImportedSession(sessionData) {
         stps: (Array.isArray(rawSession.stps) ? rawSession.stps : []).map(function (stp) {
             return normalizeImportedStp(stp, defaults);
         }),
-        projectImage: typeof rawSession.projectImage === "string" ? rawSession.projectImage : ""
+        projectImage: typeof rawSession.projectImage === "string" ? rawSession.projectImage : "",
+        referencePhoto: typeof rawSession.referencePhoto === "string"
+            ? rawSession.referencePhoto
+            : (typeof rawSession.referenceImage === "string" ? rawSession.referenceImage : "")
     };
 }
 
@@ -657,6 +717,57 @@ function applyContrastMode(isHighContrast, shouldPersist) {
         localStorage.setItem(contrastModeStorageKey, isHighContrast ? "on" : "off");
     } catch (error) {
         console.warn("Could not save contrast mode preference.", error);
+    }
+}
+
+function normalizeImportQualityMode(mode) {
+    return normalizeSearchToken(mode) === "balanced" ? "balanced" : "sharp";
+}
+
+function getImportQualityModeLabel(mode) {
+    return normalizeImportQualityMode(mode) === "balanced" ? "Balanced" : "Sharp";
+}
+
+function loadImportQualityMode() {
+    let savedMode = "sharp";
+
+    try {
+        savedMode = normalizeImportQualityMode(localStorage.getItem(importQualityModeStorageKey));
+    } catch (error) {
+        console.warn("Could not load import quality preference.", error);
+    }
+
+    applyImportQualityMode(savedMode, false);
+}
+
+function handleImportQualityToggle() {
+    const nextMode = importQualityMode === "sharp" ? "balanced" : "sharp";
+    applyImportQualityMode(nextMode, true);
+}
+
+function applyImportQualityMode(mode, shouldPersist) {
+    importQualityMode = normalizeImportQualityMode(mode);
+
+    if (elements.importQualityToggle) {
+        const isSharpMode = importQualityMode === "sharp";
+        const modeLabel = getImportQualityModeLabel(importQualityMode);
+        const buttonLabel = "Import Quality: " + modeLabel;
+        elements.importQualityToggle.textContent = buttonLabel;
+        elements.importQualityToggle.setAttribute("aria-pressed", isSharpMode ? "true" : "false");
+        elements.importQualityToggle.setAttribute(
+            "aria-label",
+            buttonLabel + (isSharpMode ? ". Prioritizes detail." : ". Prioritizes smaller file size.")
+        );
+    }
+
+    if (!shouldPersist) {
+        return;
+    }
+
+    try {
+        localStorage.setItem(importQualityModeStorageKey, importQualityMode);
+    } catch (error) {
+        console.warn("Could not save import quality preference.", error);
     }
 }
 
@@ -934,6 +1045,7 @@ function loadSession() {
         state.depthUnit = normalizedSession.depthUnit;
         state.stps = normalizedSession.stps;
         state.projectImage = normalizedSession.projectImage;
+        state.referencePhoto = normalizedSession.referencePhoto;
     } catch (error) {
         console.warn("Could not load saved session.", error);
     }
@@ -2417,6 +2529,7 @@ function handleImportSessionFile() {
             state.depthUnit = importedSession.depthUnit;
             state.stps = importedSession.stps;
             state.projectImage = importedSession.projectImage;
+            state.referencePhoto = importedSession.referencePhoto;
 
             if (!saveSession()) {
                 alert("Imported session could not be saved in browser storage.");
@@ -2427,8 +2540,10 @@ function handleImportSessionFile() {
             refreshParentStpOptions();
             renderSavedStps();
             renderProjectBanner();
+            renderReferencePhoto();
             resetCurrentStp(false);
             setProjectImageMessage("Imported session backup: " + file.name, false);
+            setReferencePhotoMessage("", false);
 
             try {
                 await cleanupDeletedPhotoIds(removedPhotoIds);
@@ -2463,13 +2578,16 @@ async function clearSession() {
     state.depthUnit = "metric";
     state.stps = [];
     state.projectImage = "";
+    state.referencePhoto = "";
 
     localStorage.removeItem(storageKey);
     populateSiteFields();
     refreshParentStpOptions();
     renderSavedStps();
     renderProjectBanner();
+    renderReferencePhoto();
     setProjectImageMessage("", false);
+    setReferencePhotoMessage("", false);
     elements.projectImageInput.value = "";
     resetCurrentStp(true);
 
@@ -2526,7 +2644,8 @@ function saveProjectAndStartNew() {
         siteLocation: state.siteLocation,
         depthUnit: state.depthUnit,
         stps: state.stps,
-        projectImage: state.projectImage
+        projectImage: state.projectImage,
+        referencePhoto: state.referencePhoto
     });
 
     if (!saveProjectsStore(projects)) {
@@ -2540,13 +2659,16 @@ function saveProjectAndStartNew() {
     state.depthUnit = "metric";
     state.stps = [];
     state.projectImage = "";
+    state.referencePhoto = "";
 
     localStorage.removeItem(storageKey);
     populateSiteFields();
     refreshParentStpOptions();
     renderSavedStps();
     renderProjectBanner();
+    renderReferencePhoto();
     setProjectImageMessage("", false);
+    setReferencePhotoMessage("", false);
     elements.projectImageInput.value = "";
     resetCurrentStp(true);
 }
@@ -2573,6 +2695,7 @@ async function loadProject(projectId) {
     state.depthUnit = project.depthUnit || "metric";
     state.stps = Array.isArray(project.stps) ? project.stps : [];
     state.projectImage = project.projectImage || "";
+    state.referencePhoto = project.referencePhoto || project.referenceImage || "";
 
     if (!saveSession()) {
         alert("This project is too large for browser storage. Try a smaller map image.");
@@ -2582,7 +2705,9 @@ async function loadProject(projectId) {
     refreshParentStpOptions();
     renderSavedStps();
     renderProjectBanner();
+    renderReferencePhoto();
     setProjectImageMessage("", false);
+    setReferencePhotoMessage("", false);
     elements.projectImageInput.value = "";
     resetCurrentStp(false);
 
@@ -2705,6 +2830,10 @@ function renderProjects() {
 
 function isSupportedProjectImage(file) {
     const fileType = (file.type || "").toLowerCase();
+    if (fileType.startsWith("image/")) {
+        return true;
+    }
+
     if (supportedProjectImageTypes.includes(fileType)) {
         return true;
     }
@@ -2717,6 +2846,321 @@ function isSupportedProjectImage(file) {
 
 function bytesToMegabytesText(value) {
     return (value / (1024 * 1024)).toFixed(1);
+}
+
+function estimateDataUrlBytes(dataUrl) {
+    if (typeof dataUrl !== "string") {
+        return 0;
+    }
+
+    const commaIndex = dataUrl.indexOf(",");
+    if (commaIndex < 0) {
+        return dataUrl.length;
+    }
+
+    const base64Payload = dataUrl.slice(commaIndex + 1);
+    const padding = base64Payload.endsWith("==") ? 2 : (base64Payload.endsWith("=") ? 1 : 0);
+    return Math.max(0, Math.floor((base64Payload.length * 3) / 4) - padding);
+}
+
+function readFileAsDataUrl(file) {
+    return new Promise(function (resolve, reject) {
+        const reader = new FileReader();
+        reader.addEventListener("load", function () {
+            resolve(String(reader.result || ""));
+        });
+        reader.addEventListener("error", function () {
+            reject(new Error("File read failed."));
+        });
+        reader.readAsDataURL(file);
+    });
+}
+
+function loadImageFromDataUrl(dataUrl) {
+    return new Promise(function (resolve, reject) {
+        const image = new Image();
+        image.addEventListener("load", function () {
+            resolve(image);
+        });
+        image.addEventListener("error", function () {
+            reject(new Error("Image decode failed."));
+        });
+        image.src = dataUrl;
+    });
+}
+
+function getOptimizedImageMimeType(sourceMimeType) {
+    const normalizedType = (sourceMimeType || "").toLowerCase();
+    if (normalizedType === "image/webp" || normalizedType === "image/png") {
+        return "image/webp";
+    }
+
+    return "image/jpeg";
+}
+
+function getImportQualityProfile(mode) {
+    const normalizedMode = normalizeImportQualityMode(mode);
+    return importQualityProfiles[normalizedMode] || importQualityProfiles.sharp;
+}
+
+async function optimizeImageDataUrlToFit(sourceDataUrl, sourceMimeType, maxBytes, qualityProfile) {
+    const sourceBytes = estimateDataUrlBytes(sourceDataUrl);
+    if (sourceBytes <= maxBytes) {
+        return {
+            dataUrl: sourceDataUrl,
+            outputBytes: sourceBytes,
+            wasResized: false
+        };
+    }
+
+    const image = await loadImageFromDataUrl(sourceDataUrl);
+    const exportMimeType = getOptimizedImageMimeType(sourceMimeType);
+    const profile = qualityProfile || importQualityProfiles.sharp;
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const sourceMaxDimension = Math.max(sourceWidth, sourceHeight) || 1;
+    const startScale = Math.min(1, profile.maxDimension / sourceMaxDimension);
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    if (!context) {
+        throw new Error("Canvas not supported.");
+    }
+
+    let bestDataUrl = sourceDataUrl;
+    let bestBytes = sourceBytes;
+    let scale = startScale;
+    let quality = profile.initialQuality;
+
+    for (let attempt = 0; attempt < profile.maxAttempts; attempt += 1) {
+        const width = Math.max(1, Math.round(sourceWidth * scale));
+        const height = Math.max(1, Math.round(sourceHeight * scale));
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+
+        if (exportMimeType === "image/jpeg") {
+            context.fillStyle = "#ffffff";
+            context.fillRect(0, 0, width, height);
+        } else {
+            context.clearRect(0, 0, width, height);
+        }
+
+        context.drawImage(image, 0, 0, width, height);
+
+        const candidateDataUrl = canvas.toDataURL(exportMimeType, quality);
+        const candidateBytes = estimateDataUrlBytes(candidateDataUrl);
+
+        if (candidateBytes < bestBytes) {
+            bestBytes = candidateBytes;
+            bestDataUrl = candidateDataUrl;
+        }
+
+        if (candidateBytes <= maxBytes) {
+            return {
+                dataUrl: candidateDataUrl,
+                outputBytes: candidateBytes,
+                wasResized: true
+            };
+        }
+
+        const oversizeRatio = candidateBytes / maxBytes;
+
+        if (oversizeRatio > profile.oversizeHardThreshold) {
+            scale = scale * profile.downscaleHardFactor;
+        } else if (oversizeRatio > profile.oversizeSoftThreshold) {
+            scale = scale * profile.downscaleSoftFactor;
+        } else if (quality > profile.minQuality) {
+            quality = Math.max(profile.minQuality, quality - profile.qualityStep);
+        } else {
+            scale = scale * profile.downscaleFinalFactor;
+        }
+
+        if (scale < 0.2) {
+            break;
+        }
+    }
+
+    return {
+        dataUrl: bestDataUrl,
+        outputBytes: bestBytes,
+        wasResized: bestBytes < sourceBytes
+    };
+}
+
+async function createCompatibleImagePayload(file, maxBytes, qualityMode) {
+    const sourceDataUrl = await readFileAsDataUrl(file);
+    const sourceBytes = estimateDataUrlBytes(sourceDataUrl);
+    const normalizedQualityMode = normalizeImportQualityMode(qualityMode || importQualityMode);
+    const optimized = await optimizeImageDataUrlToFit(
+        sourceDataUrl,
+        file.type,
+        maxBytes,
+        getImportQualityProfile(normalizedQualityMode)
+    );
+
+    return {
+        dataUrl: optimized.dataUrl,
+        sourceBytes: sourceBytes,
+        outputBytes: optimized.outputBytes,
+        wasResized: optimized.wasResized,
+        qualityMode: normalizedQualityMode
+    };
+}
+
+function setReferencePhotoMessage(text, isError) {
+    if (!elements.referencePhotoMessage) {
+        return;
+    }
+
+    elements.referencePhotoMessage.textContent = text || "";
+    elements.referencePhotoMessage.classList.toggle("is-error", Boolean(isError));
+}
+
+function renderReferencePhoto() {
+    const hasPhoto = Boolean(state.referencePhoto);
+
+    if (elements.referencePhotoImg) {
+        elements.referencePhotoImg.hidden = !hasPhoto;
+        elements.referencePhotoImg.src = hasPhoto ? state.referencePhoto : "";
+    }
+
+    if (elements.referencePhotoEmpty) {
+        elements.referencePhotoEmpty.hidden = hasPhoto;
+    }
+
+    if (elements.clearReferencePhotoButton) {
+        elements.clearReferencePhotoButton.hidden = !hasPhoto;
+    }
+
+    if (elements.referencePhotoSavedHint) {
+        elements.referencePhotoSavedHint.hidden = !hasPhoto;
+    }
+}
+
+function clearReferencePhoto(showMessage) {
+    const previousPhoto = state.referencePhoto;
+    state.referencePhoto = "";
+
+    if (!saveSession()) {
+        state.referencePhoto = previousPhoto;
+        renderReferencePhoto();
+        setReferencePhotoMessage("Reference photo could not be updated in browser storage.", true);
+        return;
+    }
+
+    if (elements.referencePhotoInput) {
+        elements.referencePhotoInput.value = "";
+    }
+
+    renderReferencePhoto();
+    setReferencePhotoMessage(showMessage ? "Reference photo removed." : "", false);
+}
+
+function openReferencePhotoPicker() {
+    if (!elements.referencePhotoInput) {
+        return;
+    }
+
+    elements.referencePhotoInput.value = "";
+
+    try {
+        if (typeof elements.referencePhotoInput.showPicker === "function") {
+            elements.referencePhotoInput.showPicker();
+        } else {
+            elements.referencePhotoInput.click();
+        }
+    } catch (error) {
+        elements.referencePhotoInput.click();
+    }
+}
+
+async function handleReferencePhotoUpload() {
+    if (!elements.referencePhotoInput) {
+        return;
+    }
+
+    const file = elements.referencePhotoInput.files[0];
+
+    if (!file) {
+        return;
+    }
+
+    if (!(file.type || "").toLowerCase().startsWith("image/")) {
+        setReferencePhotoMessage("Unsupported file type. Select an image file.", true);
+        elements.referencePhotoInput.value = "";
+        return;
+    }
+
+    if (file.size > maxImageSourceSizeBytes) {
+        setReferencePhotoMessage("Reference photo is too large to process. Use an image under 20 MB.", true);
+        elements.referencePhotoInput.value = "";
+        return;
+    }
+
+    const activeQualityMode = importQualityMode;
+    const modeLabel = getImportQualityModeLabel(activeQualityMode);
+    setReferencePhotoMessage("Optimizing reference photo for compatibility (" + modeLabel + " mode)...", false);
+
+    let imagePayload;
+    try {
+        imagePayload = await createCompatibleImagePayload(file, maxReferencePhotoSizeBytes, activeQualityMode);
+    } catch (error) {
+        setReferencePhotoMessage("Reference photo could not be read. Try a different image.", true);
+        elements.referencePhotoInput.value = "";
+        return;
+    }
+
+    if (imagePayload.outputBytes > maxReferencePhotoSizeBytes) {
+        setReferencePhotoMessage(
+            "Reference photo is still too large after resizing. Try a smaller image.",
+            true
+        );
+        elements.referencePhotoInput.value = "";
+        return;
+    }
+
+    const previousPhoto = state.referencePhoto;
+    state.referencePhoto = imagePayload.dataUrl;
+
+    if (!saveSession()) {
+        state.referencePhoto = previousPhoto;
+        renderReferencePhoto();
+        setReferencePhotoMessage("Reference photo could not be saved. Use a smaller image.", true);
+        elements.referencePhotoInput.value = "";
+        return;
+    }
+
+    renderReferencePhoto();
+    if (imagePayload.wasResized) {
+        setReferencePhotoMessage(
+            "Reference photo loaded and resized: "
+                + (file.name || "image")
+                + " ("
+                + bytesToMegabytesText(imagePayload.sourceBytes)
+                + " MB -> "
+                + bytesToMegabytesText(imagePayload.outputBytes)
+                + " MB, "
+                + getImportQualityModeLabel(imagePayload.qualityMode)
+                + " mode).",
+            false
+        );
+        return;
+    }
+
+    setReferencePhotoMessage(
+        "Reference photo loaded: "
+            + (file.name || "image")
+            + " ("
+            + bytesToMegabytesText(imagePayload.outputBytes)
+            + " MB, "
+            + getImportQualityModeLabel(imagePayload.qualityMode)
+            + " mode).",
+        false
+    );
 }
 
 function setProjectImageMessage(text, isError) {
@@ -2804,7 +3248,7 @@ function closeMapViewer() {
     document.body.style.overflow = "";
 }
 
-function handleProjectImageUpload() {
+async function handleProjectImageUpload() {
     const file = elements.projectImageInput.files[0];
 
     if (!file) {
@@ -2812,43 +3256,74 @@ function handleProjectImageUpload() {
     }
 
     if (!isSupportedProjectImage(file)) {
-        setProjectImageMessage("Unsupported file type. Use JPG, PNG, or WEBP.", true);
+        setProjectImageMessage("Unsupported file type. Select an image file.", true);
         elements.projectImageInput.value = "";
         return;
     }
 
-    if (file.size > maxProjectImageSizeBytes) {
-        setProjectImageMessage("File is too large. Maximum size is 3 MB.", true);
+    if (file.size > maxImageSourceSizeBytes) {
+        setProjectImageMessage("Image is too large to process. Use an image under 20 MB.", true);
         elements.projectImageInput.value = "";
         return;
     }
 
-    const reader = new FileReader();
-    reader.addEventListener("load", function () {
-        const previousImage = state.projectImage;
-        state.projectImage = String(reader.result || "");
+    const activeQualityMode = importQualityMode;
+    const modeLabel = getImportQualityModeLabel(activeQualityMode);
+    setProjectImageMessage("Optimizing map image for compatibility (" + modeLabel + " mode)...", false);
 
-        if (!saveSession()) {
-            state.projectImage = previousImage;
-            renderProjectBanner();
-            setProjectImageMessage("Image could not be saved. Use a smaller file.", true);
-            elements.projectImageInput.value = "";
-            return;
-        }
-
-        renderProjectBanner();
-        setProjectImageMessage(
-            "Map image loaded: " + file.name + " (" + bytesToMegabytesText(file.size) + " MB). Use View Map Full Screen to expand it.",
-            false
-        );
-    });
-
-    reader.addEventListener("error", function () {
+    let imagePayload;
+    try {
+        imagePayload = await createCompatibleImagePayload(file, maxProjectImageSizeBytes, activeQualityMode);
+    } catch (error) {
         setProjectImageMessage("Image could not be read. Try a different file.", true);
         elements.projectImageInput.value = "";
-    });
+        return;
+    }
 
-    reader.readAsDataURL(file);
+    if (imagePayload.outputBytes > maxProjectImageSizeBytes) {
+        setProjectImageMessage("Image is still too large after resizing. Try a smaller file.", true);
+        elements.projectImageInput.value = "";
+        return;
+    }
+
+    const previousImage = state.projectImage;
+    state.projectImage = imagePayload.dataUrl;
+
+    if (!saveSession()) {
+        state.projectImage = previousImage;
+        renderProjectBanner();
+        setProjectImageMessage("Image could not be saved. Use a smaller file.", true);
+        elements.projectImageInput.value = "";
+        return;
+    }
+
+    renderProjectBanner();
+    if (imagePayload.wasResized) {
+        setProjectImageMessage(
+            "Map image loaded and resized: "
+                + file.name
+                + " ("
+                + bytesToMegabytesText(imagePayload.sourceBytes)
+                + " MB -> "
+                + bytesToMegabytesText(imagePayload.outputBytes)
+                + " MB, "
+                + getImportQualityModeLabel(imagePayload.qualityMode)
+                + " mode). Use View Map Full Screen to expand it.",
+            false
+        );
+        return;
+    }
+
+    setProjectImageMessage(
+        "Map image loaded: "
+            + file.name
+            + " ("
+            + bytesToMegabytesText(imagePayload.outputBytes)
+            + " MB, "
+            + getImportQualityModeLabel(imagePayload.qualityMode)
+            + " mode). Use View Map Full Screen to expand it.",
+        false
+    );
 }
 
 function removeProjectImage() {

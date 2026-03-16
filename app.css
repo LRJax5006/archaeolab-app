@@ -127,6 +127,9 @@ h1 {
 
 .entry-photo-media {
     min-height: 100%;
+    position: relative;
+    display: grid;
+    place-items: center;
     background: #b6aa98;
 }
 
@@ -135,6 +138,24 @@ h1 {
     height: 100%;
     display: block;
     object-fit: cover;
+}
+
+.entry-photo-empty {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    text-align: center;
+}
+
+.entry-photo-empty p {
+    margin: 0;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.24);
+    color: var(--ink-soft);
 }
 
 .entry-photo-copy {
@@ -147,6 +168,40 @@ h1 {
     margin: 0;
     color: var(--ink-soft);
     line-height: 1.55;
+}
+
+.entry-photo-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.entry-photo-message {
+    margin: 0;
+    min-height: 1.3em;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+}
+
+.entry-photo-saved-hint {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 0, 0, 0.22);
+    background: rgba(214, 164, 48, 0.2);
+    color: var(--ink);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.entry-photo-message.is-error {
+    color: var(--error);
 }
 
 .section-head {
@@ -888,6 +943,12 @@ body.high-contrast .project-banner-actions .ghost-button:hover,
 body.high-contrast .project-banner-upload-btn:hover {
     background: #1c1c1c;
     border-color: #ffffff;
+}
+
+body.high-contrast .entry-photo-saved-hint {
+    background: #ffd24d;
+    border-color: #000000;
+    color: #000000;
 }
 
 body.high-contrast .map-viewer {
