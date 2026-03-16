@@ -14,6 +14,18 @@
 </head>
 <body>
     <div class="page-shell">
+        <div id="pwaInstallBanner" class="pwa-install-banner" hidden>
+            <div class="pwa-install-content">
+                <span class="pwa-install-text">Install Archaeolab on your device for offline use</span>
+            </div>
+            <div class="pwa-install-actions">
+                <button type="button" id="pwaInstallButton" class="pwa-install-button">Install App</button>
+                <button type="button" id="pwaInstallDismiss" class="pwa-install-dismiss" aria-label="Dismiss">&#x2715;</button>
+            </div>
+            <p id="pwaIosInstructions" class="pwa-ios-instructions" hidden>
+                Tap the Share button (&uarr;) then &ldquo;Add to Home Screen&rdquo;
+            </p>
+        </div>
         <div class="project-banner" id="projectBanner">
             <img id="projectBannerImg" class="project-banner-img" alt="Project image" hidden>
             <div id="projectBannerEmpty" class="project-banner-empty">

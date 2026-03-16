@@ -360,6 +360,68 @@ h1 {
     gap: 10px;
 }
 
+.pwa-install-banner {
+    background: var(--primary);
+    color: #fff;
+    padding: 0.75rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.pwa-install-content {
+    flex: 1;
+}
+
+.pwa-install-text {
+    font-size: 0.95rem;
+}
+
+.pwa-install-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+.pwa-install-button {
+    background: #fff;
+    color: var(--primary);
+    border: none;
+    padding: 0.4rem 1rem;
+    border-radius: 6px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+}
+
+.pwa-install-button:hover {
+    background: #f0e8e8;
+}
+
+.pwa-install-dismiss {
+    background: transparent;
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    padding: 0.3rem 0.65rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.pwa-install-dismiss:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.pwa-ios-instructions {
+    width: 100%;
+    font-size: 0.9rem;
+    margin: 0.25rem 0 0;
+    color: rgba(255, 255, 255, 0.92);
+}
+
 .gps-inline {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

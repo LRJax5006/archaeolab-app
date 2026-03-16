@@ -51,6 +51,7 @@ let photoDatabasePromise;
 let importQualityMode = "sharp";
 let pendingSavedPhotoOpenName = "";
 let activeMapViewerObjectUrl = "";
+let deferredInstallPrompt = null;
 const dataSafetyState = {
     loadedFromCoreBackup: false,
     lastFullSessionSaveOk: true,
@@ -325,6 +326,7 @@ function initializeApp() {
     updateImageStorageStatus();
     updateDataSafetyStatus();
     registerServiceWorker();
+    setupPwaInstallPrompt();
 }
 
 function registerServiceWorker() {
@@ -341,6 +343,58 @@ function registerServiceWorker() {
             console.warn("Could not register service worker.", error);
         });
     });
+}
+
+function setupPwaInstallPrompt() {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;
+    if (isStandalone) return; // already installed
+
+    // Standard install prompt (Chrome Android/Desktop, Edge)
+    window.addEventListener("beforeinstallprompt", function (e) {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        if (elements.pwaInstallBanner) {
+            elements.pwaInstallBanner.hidden = false;
+        }
+    });
+
+    window.addEventListener("appinstalled", function () {
+        deferredInstallPrompt = null;
+        if (elements.pwaInstallBanner) {
+            elements.pwaInstallBanner.hidden = true;
+        }
+    });
+
+    // iOS Safari: no beforeinstallprompt — show manual instructions
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (isIos) {
+        if (elements.pwaInstallBanner) {
+            elements.pwaInstallBanner.hidden = false;
+        }
+        if (elements.pwaInstallButton) {
+            elements.pwaInstallButton.hidden = true;
+        }
+        const iosInstructions = document.getElementById("pwaIosInstructions");
+        if (iosInstructions) iosInstructions.hidden = false;
+    }
+}
+
+function handlePwaInstallClick() {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(function () {
+        deferredInstallPrompt = null;
+        if (elements.pwaInstallBanner) {
+            elements.pwaInstallBanner.hidden = true;
+        }
+    });
+}
+
+function handlePwaInstallDismiss() {
+    if (elements.pwaInstallBanner) {
+        elements.pwaInstallBanner.hidden = true;
+    }
 }
 
 function cacheElements() {
@@ -407,6 +461,8 @@ function cacheElements() {
     elements.mapViewerImage = document.getElementById("mapViewerImage");
     elements.closeMapViewerButton = document.getElementById("closeMapViewerButton");
     elements.savedPhotoOpenInput = document.getElementById("savedPhotoOpenInput");
+    elements.pwaInstallBanner = document.getElementById("pwaInstallBanner");
+    elements.pwaInstallButton = document.getElementById("pwaInstallButton");
 }
 
 function bindEvents() {
@@ -460,6 +516,14 @@ function bindEvents() {
 
     if (elements.useCurrentGpsButton) {
         elements.useCurrentGpsButton.addEventListener("click", handleUseCurrentGps);
+    }
+
+    if (elements.pwaInstallButton) {
+        elements.pwaInstallButton.addEventListener("click", handlePwaInstallClick);
+    }
+    const pwaInstallDismiss = document.getElementById("pwaInstallDismiss");
+    if (pwaInstallDismiss) {
+        pwaInstallDismiss.addEventListener("click", handlePwaInstallDismiss);
     }
 
     elements.stpEntryType.addEventListener("change", function () {
