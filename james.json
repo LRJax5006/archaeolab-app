@@ -1,0 +1,173 @@
+{
+  "siteName": "James",
+  "siteLocation": "Howard",
+  "depthUnit": "engineering-feet",
+  "stps": [
+    {
+      "siteName": "James",
+      "siteLocation": "Howard",
+      "depthUnit": "engineering-feet",
+      "stpLabel": "A1",
+      "entryType": "base",
+      "parentStp": "",
+      "supDirection": "",
+      "gpsLatitude": "39.234217",
+      "gpsLongitude": "-76.867433",
+      "savedAt": "2026-03-16T21:07:19.249Z",
+      "strata": [
+        {
+          "stratumLabel": "1",
+          "depth": "1",
+          "munsell": "10YR3/6",
+          "soilType": "Clay",
+          "horizon": "A",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        },
+        {
+          "stratumLabel": "2",
+          "depth": "2",
+          "munsell": "10YR3/6",
+          "soilType": "Clay & sand",
+          "horizon": "B",
+          "artifactCatalog": "",
+          "artifactSummary": "ceramic",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        },
+        {
+          "stratumLabel": "3",
+          "depth": "3",
+          "munsell": "10YR4/6",
+          "soilType": "Clay",
+          "horizon": "E",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        }
+      ]
+    },
+    {
+      "siteName": "James",
+      "siteLocation": "Howard",
+      "depthUnit": "engineering-feet",
+      "stpLabel": "A2",
+      "entryType": "base",
+      "parentStp": "",
+      "supDirection": "",
+      "gpsLatitude": "39.234229",
+      "gpsLongitude": "-76.867451",
+      "savedAt": "2026-03-16T21:51:55.815Z",
+      "strata": [
+        {
+          "stratumLabel": "1",
+          "depth": "1",
+          "munsell": "10YR3/6",
+          "soilType": "Clayey sandy silt loam",
+          "horizon": "A",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        },
+        {
+          "stratumLabel": "2",
+          "depth": "2",
+          "munsell": "10YR4/2",
+          "soilType": "Clay silt",
+          "horizon": "A4",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        }
+      ]
+    },
+    {
+      "siteName": "James",
+      "siteLocation": "Howard",
+      "depthUnit": "engineering-feet",
+      "stpLabel": "A3",
+      "entryType": "base",
+      "parentStp": "",
+      "supDirection": "",
+      "gpsLatitude": "39.234227",
+      "gpsLongitude": "-76.867456",
+      "savedAt": "2026-03-16T21:52:47.776Z",
+      "strata": [
+        {
+          "stratumLabel": "1",
+          "depth": "1",
+          "munsell": "10YR4/2",
+          "soilType": "Clay loam",
+          "horizon": "Ap",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        },
+        {
+          "stratumLabel": "2",
+          "depth": "2",
+          "munsell": "10YR3/4",
+          "soilType": "Clayey sandy silt loam",
+          "horizon": "A4",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        }
+      ]
+    },
+    {
+      "siteName": "James",
+      "siteLocation": "Howard",
+      "depthUnit": "engineering-feet",
+      "stpLabel": "A4",
+      "entryType": "base",
+      "parentStp": "",
+      "supDirection": "",
+      "gpsLatitude": "",
+      "gpsLongitude": "",
+      "savedAt": "2026-03-16T21:53:35.498Z",
+      "strata": [
+        {
+          "stratumLabel": "1",
+          "depth": "1",
+          "munsell": "10YR3/6",
+          "soilType": "Clayey sandy silt",
+          "horizon": "A",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        },
+        {
+          "stratumLabel": "2",
+          "depth": "2",
+          "munsell": "10YR3/3",
+          "soilType": "Clayey silt loam",
+          "horizon": "Ao2",
+          "artifactCatalog": "",
+          "artifactSummary": "",
+          "notes": "",
+          "photoNames": [],
+          "photos": []
+        }
+      ]
+    }
+  ],
+  "projectImage": "",
+  "referencePhoto": ""
+}
