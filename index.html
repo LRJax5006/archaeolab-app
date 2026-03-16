@@ -83,86 +83,99 @@
             </section>
 
             <form id="entryForm">
-                <section class="panel">
-                    <div class="section-head">
-                        <div>
-                            <h2>Site Details</h2>
-                            <p>Start with the site name, site location, and the first STP label.</p>
-                        </div>
-                    </div>
-
-                    <div class="field-grid">
-                        <label class="field">
-                            <span>Site Name</span>
-                            <input type="text" id="siteName" name="siteName" placeholder="ex: Johnson Farm Site" required>
-                        </label>
-
-                        <label class="field">
-                            <span>Site Location</span>
-                            <input type="text" id="siteLocation" name="siteLocation" placeholder="County, parcel, or project area" required>
-                        </label>
-
-                        <label class="field">
-                            <span>Depth Measurement</span>
-                            <select id="depthUnit" name="depthUnit">
-                                <option value="metric">Metric</option>
-                                <option value="standard">Standard</option>
-                                <option value="engineering-feet">Engineering Feet</option>
-                            </select>
-                        </label>
-
-                        <label class="field">
-                            <span>STP Entry Type</span>
-                            <select id="stpEntryType" name="stpEntryType">
-                                <option value="base">Base STP</option>
-                                <option value="supplemental">Supplemental STP</option>
-                            </select>
-                        </label>
-
-                        <label class="field">
-                            <span>Parent Base STP</span>
-                            <select id="parentStp" name="parentStp" disabled>
-                                <option value="">Select base STP</option>
-                            </select>
-                        </label>
-
-                        <label class="field">
-                            <span>GPS Latitude</span>
-                            <input type="number" id="gpsLatitude" name="gpsLatitude" step="any" min="-90" max="90" placeholder="38.98765">
-                        </label>
-
-                        <label class="field">
-                            <span>GPS Longitude</span>
-                            <input type="number" id="gpsLongitude" name="gpsLongitude" step="any" min="-180" max="180" placeholder="-76.94567">
-                        </label>
-
-                        <div class="field stp-label-field">
-                            <label for="stpLabel">Current STP Label</label>
-                            <div class="inline-field">
-                                <input type="text" id="stpLabel" name="stpLabel" placeholder="A1" required>
-                                <button type="button" id="suggestLabelButton" class="secondary-button">Suggest Next</button>
+                <div class="entry-layout">
+                    <section class="panel">
+                        <div class="section-head">
+                            <div>
+                                <h2>Site Details</h2>
+                                <p>Start with the site name, site location, and the first STP label.</p>
                             </div>
+                        </div>
+
+                        <div class="field-grid">
+                            <label class="field">
+                                <span>Site Name</span>
+                                <input type="text" id="siteName" name="siteName" placeholder="ex: Johnson Farm Site" required>
+                            </label>
 
                             <label class="field">
-                                <span>Supplemental Direction (Sup)</span>
-                                <select id="supDirection" name="supDirection">
-                                    <option value="">None (Base STP)</option>
-                                    <option value="N">North (N)</option>
-                                    <option value="S">South (S)</option>
-                                    <option value="E">East (E)</option>
-                                    <option value="W">West (W)</option>
+                                <span>Site Location</span>
+                                <input type="text" id="siteLocation" name="siteLocation" placeholder="County, parcel, or project area" required>
+                            </label>
+
+                            <label class="field">
+                                <span>Depth Measurement</span>
+                                <select id="depthUnit" name="depthUnit">
+                                    <option value="metric">Metric</option>
+                                    <option value="standard">Standard</option>
+                                    <option value="engineering-feet">Engineering Feet</option>
                                 </select>
                             </label>
 
-                            <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W.</p>
-                        </div>
-                    </div>
+                            <label class="field">
+                                <span>STP Entry Type</span>
+                                <select id="stpEntryType" name="stpEntryType">
+                                    <option value="base">Base STP</option>
+                                    <option value="supplemental">Supplemental STP</option>
+                                </select>
+                            </label>
 
-                    <p class="mapping-note">
-                        Excel-ready export starts with the STPs sheet column order:
-                        <strong>Sup, Transect, Unit, STP, Stratum, Depth, Munsell, Texture, Horizon, Notes/Inclusions</strong>.
-                    </p>
-                </section>
+                            <label class="field">
+                                <span>Parent Base STP</span>
+                                <select id="parentStp" name="parentStp" disabled>
+                                    <option value="">Select base STP</option>
+                                </select>
+                            </label>
+
+                            <label class="field">
+                                <span>GPS Latitude</span>
+                                <input type="number" id="gpsLatitude" name="gpsLatitude" step="any" min="-90" max="90" placeholder="38.98765">
+                            </label>
+
+                            <label class="field">
+                                <span>GPS Longitude</span>
+                                <input type="number" id="gpsLongitude" name="gpsLongitude" step="any" min="-180" max="180" placeholder="-76.94567">
+                            </label>
+
+                            <div class="field stp-label-field">
+                                <label for="stpLabel">Current STP Label</label>
+                                <div class="inline-field">
+                                    <input type="text" id="stpLabel" name="stpLabel" placeholder="A1" required>
+                                    <button type="button" id="suggestLabelButton" class="secondary-button">Suggest Next</button>
+                                </div>
+
+                                <label class="field">
+                                    <span>Supplemental Direction (Sup)</span>
+                                    <select id="supDirection" name="supDirection">
+                                        <option value="">None (Base STP)</option>
+                                        <option value="N">North (N)</option>
+                                        <option value="S">South (S)</option>
+                                        <option value="E">East (E)</option>
+                                        <option value="W">West (W)</option>
+                                    </select>
+                                </label>
+
+                                <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W.</p>
+                            </div>
+                        </div>
+
+                        <p class="mapping-note">
+                            Excel-ready export starts with the STPs sheet column order:
+                            <strong>Sup, Transect, Unit, STP, Stratum, Depth, Munsell, Texture, Horizon, Notes/Inclusions</strong>.
+                        </p>
+                    </section>
+
+                    <aside class="panel entry-photo-panel" aria-label="Field reference photo">
+                        <div class="entry-photo-media">
+                            <img class="entry-photo-img" src="IMG_3376.JPG" alt="Field photo beside the STP data entry area" loading="lazy">
+                        </div>
+                        <div class="entry-photo-copy">
+                            <p class="eyebrow">Field Reference</p>
+                            <h2>STP Entry Photo</h2>
+                            <p>Keep a field image visible while entering site details, strata descriptions, and notes.</p>
+                        </div>
+                    </aside>
+                </div>
 
                 <section class="panel">
                     <div class="section-head">

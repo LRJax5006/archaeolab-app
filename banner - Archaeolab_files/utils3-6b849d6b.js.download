@@ -1,0 +1,2 @@
+define("@widget/LAYOUT/c/utils3-6b849d6b.js",["exports"],(function(t){"use strict";t.g=function({oWidth:t,oHeight:i,rotation:n="0"}){const o="90"===n||"270"===n,e=(o?i:t)/((o?t:i)||1);return e>=1.5?"landscape":e<=.8?"portrait":"square"}})),"undefined"!=typeof window&&(window.global=window);
+//# sourceMappingURL=utils3-6b849d6b.js.map

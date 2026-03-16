@@ -1,0 +1,7 @@
+@font-face {
+  font-family: 'Yeseva One';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/l/font?kit=OpNJno4ck8vc-xYpwWWxpi9HVj2Nkie4WlI2&skey=9baeda5be4021674&v=v24) format('woff2');
+}

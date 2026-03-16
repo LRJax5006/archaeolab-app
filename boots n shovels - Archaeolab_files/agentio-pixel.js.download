@@ -1,0 +1,75 @@
+window.initAgentioPixel = function (appId) {
+  // Your existing snowplow initialization code
+  (function (p, l, o, w, i, n, g) {
+    if (!p[i]) {
+      p.GlobalSnowplowNamespace = p.GlobalSnowplowNamespace || [];
+      p.GlobalSnowplowNamespace.push(i);
+      p[i] = function () {
+        (p[i].q = p[i].q || []).push(arguments);
+      };
+      p[i].q = p[i].q || [];
+      n = l.createElement(o);
+      g = l.getElementsByTagName(o)[0];
+      n.async = 1;
+      n.src = w;
+      g.parentNode.insertBefore(n, g);
+    }
+  })(
+    window,
+    document,
+    "script",
+    "https://static.agentio.com/sp.js",
+    "agentioPixel"
+  );
+
+  agentioPixel("newTracker", "sp", "https://collector.agentio.com", {
+    appId: appId,
+    platform: "web",
+    respectDoNotTrack: true,
+    cookieDomain: window.location.hostname.match(/[^.]*\.[^.]*$/)[0],
+  });
+
+  agentioPixel("setOptOutCookie", "agentio-opt-out");
+  agentioPixel("trackPageView");
+
+  // Remove existing conversion listener if present
+  document.removeEventListener(
+    "AgentioConversion",
+    window.agentioConversionHandler
+  );
+  // Create new handler
+  window.agentioConversionHandler = function (event) {
+    agentioPixel("trackStructEvent", {
+      category: "Conversion",
+      action: event.detail.conversionType,
+      label: event.detail.label,
+      property: event.detail.property,
+      value: event.detail.value,
+    });
+  };
+  // Add new listener
+  document.addEventListener(
+    "AgentioConversion",
+    window.agentioConversionHandler
+  );
+};
+
+window.blockAgentioTracking = function () {
+  const expirationDate = new Date();
+  expirationDate.setFullYear(expirationDate.getFullYear() + 2);
+  document.cookie =
+    "agentio-opt-out=true; " +
+    "expires=" +
+    expirationDate.toUTCString() +
+    "; " +
+    "path=/; " +
+    "domain=" +
+    window.location.hostname.match(/[^.]*\.[^.]*$/)[0];
+};
+
+window.resumeAgentioTracking = function () {
+  document.cookie =
+    "agentio-opt-out=; path=/; domain=" +
+    window.location.hostname.match(/[^.]*\.[^.]*$/)[0] +
+    "; expires=Thu, 01 Jan 1970 00:00:01 GMT";
+};

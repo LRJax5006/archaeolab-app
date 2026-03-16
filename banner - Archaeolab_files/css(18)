@@ -1,0 +1,6 @@
+@font-face {
+  font-family: 'Source Sans Pro';
+  font-style: normal;
+  font-weight: 600;
+  src: url(https://fonts.gstatic.com/l/font?kit=6xKydSBYKcSV-LCoeQqfX1RYOo3i54rAlQVg15HNpnVQNlLkZZs&skey=227a890402fab339&v=v23) format('woff2');
+}

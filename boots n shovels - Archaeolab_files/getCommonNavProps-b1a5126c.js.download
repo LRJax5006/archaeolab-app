@@ -1,0 +1,2 @@
+define("@widget/LAYOUT/c/getCommonNavProps-b1a5126c.js",["exports"],(function(n){"use strict";n.a=function({navigation:n}){return{hasNav:!(!n||!n.length)}},n.g=function({navigation:n,pages:t,navCtaButton:e}){return{hasNav:!(!n||!n.length)||t?.length>=1&&e&&e.enabled}}})),"undefined"!=typeof window&&(window.global=window);
+//# sourceMappingURL=getCommonNavProps-b1a5126c.js.map

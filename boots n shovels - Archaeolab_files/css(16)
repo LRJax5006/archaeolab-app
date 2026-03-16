@@ -1,0 +1,6 @@
+@font-face {
+  font-family: 'Share';
+  font-style: normal;
+  font-weight: 400;
+  src: url(https://fonts.gstatic.com/l/font?kit=i7dEIFliZjKNF5VIBLvtESM0Mg&skey=51b92acf87f9279b&v=v20) format('woff2');
+}

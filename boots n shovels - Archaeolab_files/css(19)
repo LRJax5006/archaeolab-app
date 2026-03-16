@@ -1,0 +1,6 @@
+@font-face {
+  font-family: 'Vollkorn';
+  font-style: normal;
+  font-weight: 700;
+  src: url(https://fonts.gstatic.com/l/font?kit=0ybgGDoxxrvAnPhYGzMlQLzuMasz6Df213auHHufT9qOsP9O&skey=70793812edfff824&v=v30) format('woff2');
+}

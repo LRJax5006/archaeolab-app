@@ -1,0 +1,7 @@
+@font-face {
+  font-family: 'Cinzel';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(https://fonts.gstatic.com/l/font?kit=8vIU7ww63mVu7gtR-kwKxNvkNOjw-tbnTY_3DgU9B8i7KA&skey=f319ae43d1034808&v=v26) format('woff2');
+}

@@ -1,0 +1,7 @@
+@font-face {
+  font-family: 'Air America';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: local('Air America'), url(https://img1.wsimg.com/blobby/go/font/air-america/air-america-regular.woff2) format('woff2'), url(https://img1.wsimg.com/blobby/go/font/air-america/air-america-regular.woff) format('woff');
+}
