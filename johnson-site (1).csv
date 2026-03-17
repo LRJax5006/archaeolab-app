@@ -1,10 +1,34 @@
 Sup,Transect,Unit,STP,Stratum,Depth,Munsell,Texture,Horizon,Notes/Inclusions,Artifact Catalog,Artifact Summary,Photo Names,Site Name,Site Location,Depth Unit,STP Entry Type,Parent STP,Recorded STP Label,GPS Latitude,GPS Longitude
-,A,1,A1,1,.2,10YR3/3,Loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A1,39.234201,-76.867514
-,A,1,A1,2,.6,10YR4/2,Sandy clay loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,A1,39.234201,-76.867514
-,A,1,A1,3,.9,10YR4/6,Clay,E,,,,,Johnson Site,Howard,engineering-feet,base,,A1,39.234201,-76.867514
-,A,2,A2,1,.2,10YR3/3,Clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A2,39.234200,-77.867513
-,A,3,A3,1,.2,10YR3/3,Sandy clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A3,39.234202,-76.867515
-,A,3,A3,2,.45,10YR4/6,Clayey silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,A3,39.234202,-76.867515
-,A,3,A3,3,.8,10YR4/6,Clay,B,,,,,Johnson Site,Howard,engineering-feet,base,,A3,39.234202,-76.867515
-,A,4,A4,1,.3,10YR3/3,Silt loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A4,39.234228,-76.867452
-,A,4,A4,2,.45,10YR4/3,Silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,A4,39.234228,-76.867452
+,A,1,A1,1,0.2,10YR3/3,Loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A1,39.16623824,-76.72009637
+,A,1,A1,2,0.6,10YR4/2,Sandy clay loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,A1,39.16623824,-76.72009637
+,A,1,A1,3,0.9,10YR4/6,Clay,E,,,,,Johnson Site,Howard,engineering-feet,base,,A1,39.16623824,-76.72009637
+,A,2,A2,1,0.2,10YR3/3,Clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A2,39.16635495,-76.72019571
+,A,3,A3,1,0.2,10YR3/3,Sandy clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A3,39.16638325,-76.72023869
+,A,3,A3,2,0.45,10YR4/6,Clayey silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,A3,39.16638325,-76.72023869
+,A,3,A3,3,0.8,10YR4/6,Clay,B,,,,,Johnson Site,Howard,engineering-feet,base,,A3,39.16638325,-76.72023869
+,A,4,A4,1,0.3,10YR3/3,Silt loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,A4,39.16641306,-76.72027059
+,A,4,A4,2,0.45,10YR4/3,Silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,A4,39.16641306,-76.72027059
+,B,1,B1,1,0.2,10YR3/3,Loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,B1,39.166147,-76.720103
+,B,1,B1,2,0.6,10YR4/2,Sandy clay loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,B1,39.166147,-76.720103
+,B,1,B1,3,0.9,10YR4/6,Clay,E,,,,,Johnson Site,Howard,engineering-feet,base,,B1,39.166147,-76.720103
+,B,2,B2,1,0.2,10YR3/3,Clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,B2,39.166188,-76.720153
+,B,3,B2,2,0.2,10YR3/3,Sandy clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,B2,39.166188,-76.720153
+,B,3,B2,3,0.45,10YR4/6,Clayey silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,B2,39.166188,-76.720153
+,B,3,B3,1,0.8,10YR4/6,Clay,B,,,,,Johnson Site,Howard,engineering-feet,base,,B3,39.166194,-76.720167
+,B,4,B3,2,0.3,10YR3/3,Silt loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,B3,39.166194,-76.720167
+,B,4,B3,3,0.45,10YR4/3,Silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,B3,39.166194,-76.720167
+,B,1,B4,1,0.2,10YR3/3,Loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,B4,39.16626245,-76.72023548
+,B,1,B4,2,0.6,10YR4/2,Sandy clay loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,B4,39.16626245,-76.72023548
+,B,1,B4,3,0.9,10YR4/6,Clay,E,,,,,Johnson Site,Howard,engineering-feet,base,,B4,39.16626245,-76.72023548
+,C,2,C1,1,0.2,10YR3/3,Clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,C1,39.16626245,-76.72023548
+,C,3,C1,2,0.2,10YR3/3,Sandy clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,C1,39.16626245,-76.72023548
+,C,3,C1,3,0.45,10YR4/6,Clayey silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,C1,39.16626245,-76.72023548
+,C,3,C2,1,0.8,10YR4/6,Clay,B,,,,,Johnson Site,Howard,engineering-feet,base,,C2,39.16621541,-76.72024197
+,C,4,C2,2,0.3,10YR3/3,Silt loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,C2,39.16621541,-76.72024197
+,C,4,C2,3,0.45,10YR4/3,Silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,C2,39.16621541,-76.72024197
+,C,1,C3,1,0.2,10YR3/3,Loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,C3,39.16623081,-76.72025653
+,C,1,C3,2,0.6,10YR4/2,Sandy clay loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,C3,39.16623081,-76.72025653
+,C,1,C3,3,0.9,10YR4/6,Clay,E,,,,,Johnson Site,Howard,engineering-feet,base,,C3,39.16623081,-76.72025653
+,C,2,C4,1,0.2,10YR3/3,Clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,C4,39.16625394,-76.72027686
+,C,3,C4,2,0.2,10YR3/3,Sandy clay loam,A,,,,,Johnson Site,Howard,engineering-feet,base,,C4,39.16625394,-76.72027686
+,C,3,C4,3,0.45,10YR4/6,Clayey silt loam,B,,,,,Johnson Site,Howard,engineering-feet,base,,C4,39.16625394,-76.72027686

@@ -315,6 +315,13 @@ function ensureMap() {
 
         markerLayer = window.L.layerGroup().addTo(mapInstance);
         routeLayer = window.L.layerGroup().addTo(mapInstance);
+    } else {
+        if (!markerLayer) {
+            markerLayer = window.L.layerGroup().addTo(mapInstance);
+        }
+        if (!routeLayer) {
+            routeLayer = window.L.layerGroup().addTo(mapInstance);
+        }
     }
 
     return true;
@@ -325,20 +332,19 @@ function switchMapLayer(layerName) {
         return;
     }
 
+    // Remove both layers to ensure clean state
+    if (mapInstance.hasLayer(topoLayer)) {
+        mapInstance.removeLayer(topoLayer);
+    }
+    if (mapInstance.hasLayer(satelliteLayer)) {
+        mapInstance.removeLayer(satelliteLayer);
+    }
+
+    // Add the selected layer
     if (layerName === "satellite") {
-        if (mapInstance.hasLayer(topoLayer)) {
-            mapInstance.removeLayer(topoLayer);
-        }
-        if (!mapInstance.hasLayer(satelliteLayer)) {
-            mapInstance.addLayer(satelliteLayer);
-        }
+        satelliteLayer.addTo(mapInstance);
     } else {
-        if (mapInstance.hasLayer(satelliteLayer)) {
-            mapInstance.removeLayer(satelliteLayer);
-        }
-        if (!mapInstance.hasLayer(topoLayer)) {
-            mapInstance.addLayer(topoLayer);
-        }
+        topoLayer.addTo(mapInstance);
     }
 
     // Save preference
@@ -352,6 +358,14 @@ function switchMapLayer(layerName) {
 function renderMapLayers() {
     if (!ensureMap()) {
         return;
+    }
+
+    // Apply the current radio selection to ensure it's in sync
+    const satelliteOption = document.getElementById("mapLayerSatellite");
+    if (satelliteOption && satelliteOption.checked) {
+        switchMapLayer("satellite");
+    } else {
+        switchMapLayer("topo");
     }
 
     markerLayer.clearLayers();
