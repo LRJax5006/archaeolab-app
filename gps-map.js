@@ -293,10 +293,10 @@ function ensureMap() {
         );
 
         topoLayer = window.L.tileLayer(
-            "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+            "https://basemap.nationalmap.gov/arcgis/rest/services/USGSTopo/MapServer/tile/{z}/{y}/{x}",
             {
-                maxZoom: 17,
-                attribution: "&copy; <a href='https://opentopomap.org/'>OpenTopoMap</a> contributors"
+                maxZoom: 16,
+                attribution: "&copy; <a href='https://www.usgs.gov/'>USGS</a>"
             }
         );
 
