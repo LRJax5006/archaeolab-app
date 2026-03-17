@@ -455,6 +455,18 @@ h1 {
     color: var(--error);
 }
 
+.gps-status.is-good {
+    color: #2a7a2a;
+}
+
+.gps-status.is-warn {
+    color: #b06000;
+}
+
+.gps-status.is-poor {
+    color: var(--error);
+}
+
 .field input,
 .field select,
 .field textarea {
@@ -1037,6 +1049,18 @@ body.high-contrast .session-storage-status.is-warning {
     color: #8f0000;
 }
 
+body.high-contrast .gps-status.is-good {
+    color: #005500;
+}
+
+body.high-contrast .gps-status.is-warn {
+    color: #7a4000;
+}
+
+body.high-contrast .gps-status.is-poor {
+    color: #8f0000;
+}
+
 body.high-contrast .hero-card,
 body.high-contrast .panel,
 body.high-contrast .stratum-card,
@@ -1167,6 +1191,192 @@ body.high-contrast .map-viewer-title {
 body.high-contrast .map-viewer-img {
     background: #f0f0f0;
     border-color: #000000;
+}
+
+body.dark-contrast {
+    --ink: #f0ebe3;
+    --ink-soft: #c8bfb3;
+    --accent: #ff4d4d;
+    --accent-dark: #cc2222;
+    --pine: #d8d0c4;
+    --pine-dark: #f0ebe3;
+    --gold: #ffd24d;
+    --gold-dark: #ffba00;
+    --orange: #ff9142;
+    --orange-dark: #e06820;
+    --panel: rgba(30, 25, 18, 0.97);
+    --line: rgba(255, 255, 255, 0.22);
+    --shadow: 0 0 0 rgba(0, 0, 0, 0);
+    --error: #ff4d4d;
+    background: linear-gradient(160deg, #100d0a 0%, #1a1410 50%, #0e0c09 100%);
+}
+
+body.dark-contrast .eyebrow,
+body.dark-contrast .stratum-kicker,
+body.dark-contrast .hero-card-label {
+    color: #ffba00;
+}
+
+body.dark-contrast .session-storage-status {
+    color: #c8bfb3;
+}
+
+body.dark-contrast .session-storage-status.is-warning {
+    color: #ff9142;
+}
+
+body.dark-contrast .gps-status.is-good {
+    color: #4dcc4d;
+}
+
+body.dark-contrast .gps-status.is-warn {
+    color: #ffd24d;
+}
+
+body.dark-contrast .gps-status.is-poor {
+    color: #ff4d4d;
+}
+
+body.dark-contrast .hero-card,
+body.dark-contrast .panel,
+body.dark-contrast .stratum-card,
+body.dark-contrast .saved-stp,
+body.dark-contrast .empty-state {
+    box-shadow: none;
+}
+
+body.dark-contrast .section-count {
+    background: #ffd24d;
+    border-color: #1a1410;
+    color: #1a1410;
+}
+
+body.dark-contrast .filter-match {
+    background: #ffd24d;
+    color: #1a1410;
+}
+
+body.dark-contrast .field input,
+body.dark-contrast .field select,
+body.dark-contrast .field textarea,
+body.dark-contrast .filter-field input,
+body.dark-contrast .filter-field select {
+    background: #1c1710;
+    color: #f0ebe3;
+    border-color: rgba(255, 255, 255, 0.25);
+}
+
+body.dark-contrast .primary-button {
+    background: #ffd24d;
+    color: #1a100a;
+    border-color: #ffd24d;
+}
+
+body.dark-contrast .primary-button:hover {
+    background: #ffba00;
+}
+
+body.dark-contrast .secondary-button {
+    background: #ff4d4d;
+    color: #ffffff;
+    border-color: #ff4d4d;
+}
+
+body.dark-contrast .secondary-button:hover {
+    background: #cc2222;
+}
+
+body.dark-contrast .ghost-button,
+body.dark-contrast .link-button,
+body.dark-contrast .photo-remove-button,
+body.dark-contrast .photo-open-button,
+body.dark-contrast .saved-photo-open-button {
+    background: rgba(255, 255, 255, 0.07);
+    color: #f0ebe3;
+    border: 2px solid rgba(255, 255, 255, 0.28);
+}
+
+body.dark-contrast .ghost-button:hover,
+body.dark-contrast .link-button:hover,
+body.dark-contrast .photo-remove-button:hover,
+body.dark-contrast .photo-open-button:hover,
+body.dark-contrast .saved-photo-open-button:hover {
+    background: rgba(255, 210, 77, 0.16);
+}
+
+body.dark-contrast .contrast-toggle[aria-pressed="true"] {
+    background: #ffd24d;
+    color: #1a100a;
+    border-color: #ffd24d;
+}
+
+body.dark-contrast .contrast-toggle:focus-visible,
+body.dark-contrast .filter-field input:focus,
+body.dark-contrast .filter-field select:focus,
+body.dark-contrast .field input:focus,
+body.dark-contrast .field select:focus,
+body.dark-contrast .field textarea:focus {
+    outline: 3px solid #ffd24d;
+    outline-offset: 1px;
+    border-color: #ffd24d;
+}
+
+body.dark-contrast .project-banner {
+    background:
+        linear-gradient(180deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.90)),
+        linear-gradient(92deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04)),
+        url("Boots n Shovels banner.jpg") center 42% / cover no-repeat;
+}
+
+body.dark-contrast .project-banner-overlay {
+    background: rgba(0, 0, 0, 0.68);
+}
+
+body.dark-contrast .project-banner-empty p,
+body.dark-contrast .project-banner-help,
+body.dark-contrast .project-banner-message {
+    background: #1c1710;
+    color: #f0ebe3;
+    border: 2px solid rgba(255, 255, 255, 0.25);
+}
+
+body.dark-contrast .project-banner-actions .primary-button,
+body.dark-contrast .project-banner-actions .ghost-button,
+body.dark-contrast .project-banner-upload-btn {
+    background: #ffd24d;
+    color: #1a100a;
+    border-color: #ffd24d;
+}
+
+body.dark-contrast .project-banner-actions .primary-button:hover,
+body.dark-contrast .project-banner-actions .ghost-button:hover,
+body.dark-contrast .project-banner-upload-btn:hover {
+    background: #ffba00;
+    border-color: #ffba00;
+}
+
+body.dark-contrast .entry-photo-saved-hint {
+    background: rgba(255, 210, 77, 0.14);
+    border-color: #ffd24d;
+    color: #ffd24d;
+}
+
+body.dark-contrast .map-viewer {
+    background: rgba(10, 8, 6, 0.96);
+}
+
+body.dark-contrast .map-viewer-dialog {
+    background: #1c1710;
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+body.dark-contrast .map-viewer-title {
+    color: #f0ebe3;
+}
+
+body.dark-contrast .map-viewer-img {
+    background: #0e0c09;
+    border-color: rgba(255, 255, 255, 0.18);
 }
 
 @media (max-width: 860px) {

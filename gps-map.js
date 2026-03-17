@@ -1,15 +1,21 @@
 const gpsMapPayloadStorageKey = "archaeolab-gps-map-payload-v1";
+const gpsMapLayerPrefStorageKey = "archaeolab-gps-map-layer-pref-v1";
 
 let mapInstance = null;
 let markerLayer = null;
 let routeLayer = null;
 let activePoints = [];
+let activeMarkers = [];
+let satelliteLayer = null;
+let topoLayer = null;
 
 document.addEventListener("DOMContentLoaded", initializeGpsMapPage);
 
 function initializeGpsMapPage() {
     const closeButton = document.getElementById("closeMapButton");
     const connectToggle = document.getElementById("connectPointsToggle");
+    const satelliteOption = document.getElementById("mapLayerSatellite");
+    const topoOption = document.getElementById("mapLayerTopo");
 
     if (closeButton) {
         closeButton.addEventListener("click", function () {
@@ -25,6 +31,31 @@ function initializeGpsMapPage() {
         connectToggle.addEventListener("change", function () {
             renderMapLayers();
         });
+    }
+
+    if (satelliteOption && topoOption) {
+        satelliteOption.addEventListener("change", function () {
+            if (satelliteOption.checked) {
+                switchMapLayer("satellite");
+            }
+        });
+        topoOption.addEventListener("change", function () {
+            if (topoOption.checked) {
+                switchMapLayer("topo");
+            }
+        });
+
+        // Load saved preference
+        try {
+            const savedLayer = localStorage.getItem(gpsMapLayerPrefStorageKey) || "topo";
+            if (savedLayer === "satellite") {
+                satelliteOption.checked = true;
+            } else {
+                topoOption.checked = true;
+            }
+        } catch (_error) {
+            topoOption.checked = true;
+        }
     }
 
     const payload = loadGpsMapPayload();
@@ -229,6 +260,16 @@ function renderPointList(points) {
 
         item.textContent = label + " | " + typeLabel + " | "
             + point.latitude.toFixed(6) + ", " + point.longitude.toFixed(6);
+        item.title = "Tap to fly to this point on the map";
+        item.className = "point-list-item";
+
+        item.addEventListener("click", function () {
+            if (!mapInstance || !activeMarkers[index]) {
+                return;
+            }
+            mapInstance.setView([point.latitude, point.longitude], 17);
+            activeMarkers[index].openPopup();
+        });
 
         list.appendChild(item);
     });
@@ -243,16 +284,69 @@ function ensureMap() {
     if (!mapInstance) {
         mapInstance = window.L.map("gpsMapCanvas", { zoomControl: true });
 
-        window.L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            maxZoom: 19,
-            attribution: "&copy; OpenStreetMap contributors"
-        }).addTo(mapInstance);
+        satelliteLayer = window.L.tileLayer(
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+            {
+                maxZoom: 19,
+                attribution: "&copy; <a href='https://www.arcgis.com/'>Esri</a> contributors"
+            }
+        );
+
+        topoLayer = window.L.tileLayer(
+            "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
+            {
+                maxZoom: 17,
+                attribution: "&copy; <a href='https://opentopomap.org/'>OpenTopoMap</a> contributors"
+            }
+        );
+
+        // Determine which layer to show based on saved preference
+        let layerToShow = topoLayer;
+        try {
+            const savedLayer = localStorage.getItem(gpsMapLayerPrefStorageKey);
+            if (savedLayer === "satellite") {
+                layerToShow = satelliteLayer;
+            }
+        } catch (_error) {
+            // use topo as default
+        }
+
+        layerToShow.addTo(mapInstance);
 
         markerLayer = window.L.layerGroup().addTo(mapInstance);
         routeLayer = window.L.layerGroup().addTo(mapInstance);
     }
 
     return true;
+}
+
+function switchMapLayer(layerName) {
+    if (!mapInstance || !satelliteLayer || !topoLayer) {
+        return;
+    }
+
+    if (layerName === "satellite") {
+        if (mapInstance.hasLayer(topoLayer)) {
+            mapInstance.removeLayer(topoLayer);
+        }
+        if (!mapInstance.hasLayer(satelliteLayer)) {
+            mapInstance.addLayer(satelliteLayer);
+        }
+    } else {
+        if (mapInstance.hasLayer(satelliteLayer)) {
+            mapInstance.removeLayer(satelliteLayer);
+        }
+        if (!mapInstance.hasLayer(topoLayer)) {
+            mapInstance.addLayer(topoLayer);
+        }
+    }
+
+    // Save preference
+    try {
+        localStorage.setItem(gpsMapLayerPrefStorageKey, layerName);
+    } catch (_error) {
+        // ignore
+    }
 }
 
 function renderMapLayers() {
@@ -262,6 +356,7 @@ function renderMapLayers() {
 
     markerLayer.clearLayers();
     routeLayer.clearLayers();
+    activeMarkers = [];
 
     const bounds = [];
     const lineCoordinates = [];
@@ -284,6 +379,7 @@ function renderMapLayers() {
             + (point.savedAt ? "<br><span>Saved " + escapeHtml(formatSavedAt(point.savedAt)) + "</span>" : "");
 
         marker.bindPopup(popupHtml);
+        activeMarkers.push(marker);
         bounds.push([point.latitude, point.longitude]);
         lineCoordinates.push([point.latitude, point.longitude]);
     });

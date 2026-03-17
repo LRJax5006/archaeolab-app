@@ -943,29 +943,37 @@ function loadFilterState() {
 }
 
 function loadContrastMode() {
-    let isHighContrast = false;
+    let mode = "off";
 
     try {
-        isHighContrast = localStorage.getItem(contrastModeStorageKey) === "on";
+        const stored = localStorage.getItem(contrastModeStorageKey);
+        if (stored === "light" || stored === "dark") {
+            mode = stored;
+        } else if (stored === "on") {
+            mode = "light"; // backwards compat with old persisted value
+        }
     } catch (error) {
         console.warn("Could not load contrast mode preference.", error);
     }
 
-    applyContrastMode(isHighContrast, false);
+    applyContrastMode(mode, false);
 }
 
 function handleContrastToggle() {
-    const isHighContrast = !document.body.classList.contains("high-contrast");
-    applyContrastMode(isHighContrast, true);
+    const current = document.body.classList.contains("dark-contrast") ? "dark"
+        : document.body.classList.contains("high-contrast") ? "light" : "off";
+    const next = current === "off" ? "light" : current === "light" ? "dark" : "off";
+    applyContrastMode(next, true);
 }
 
-function applyContrastMode(isHighContrast, shouldPersist) {
-    document.body.classList.toggle("high-contrast", Boolean(isHighContrast));
+function applyContrastMode(mode, shouldPersist) {
+    document.body.classList.toggle("high-contrast", mode === "light");
+    document.body.classList.toggle("dark-contrast", mode === "dark");
 
     if (elements.highContrastToggle) {
-        const toggleLabel = isHighContrast ? "High Contrast: On" : "High Contrast: Off";
+        const toggleLabel = mode === "light" ? "Contrast: Light" : mode === "dark" ? "Contrast: Dark" : "Contrast: Off";
         elements.highContrastToggle.textContent = toggleLabel;
-        elements.highContrastToggle.setAttribute("aria-pressed", isHighContrast ? "true" : "false");
+        elements.highContrastToggle.setAttribute("aria-pressed", mode !== "off" ? "true" : "false");
         elements.highContrastToggle.setAttribute("aria-label", toggleLabel);
     }
 
@@ -974,7 +982,7 @@ function applyContrastMode(isHighContrast, shouldPersist) {
     }
 
     try {
-        localStorage.setItem(contrastModeStorageKey, isHighContrast ? "on" : "off");
+        localStorage.setItem(contrastModeStorageKey, mode);
     } catch (error) {
         console.warn("Could not save contrast mode preference.", error);
     }
@@ -2747,13 +2755,16 @@ function updateStpTypeUi() {
     }
 }
 
-function setGpsStatusMessage(text, isError) {
+function setGpsStatusMessage(text, isError, accuracyClass) {
     if (!elements.gpsStatusMessage) {
         return;
     }
 
     elements.gpsStatusMessage.textContent = text || "";
     elements.gpsStatusMessage.classList.toggle("is-error", Boolean(isError));
+    elements.gpsStatusMessage.classList.toggle("is-good", accuracyClass === "is-good");
+    elements.gpsStatusMessage.classList.toggle("is-warn", accuracyClass === "is-warn");
+    elements.gpsStatusMessage.classList.toggle("is-poor", accuracyClass === "is-poor");
 }
 
 function getGpsErrorMessage(error) {
@@ -2805,11 +2816,16 @@ function handleUseCurrentGps() {
                 elements.gpsLongitude.value = longitude.toFixed(gpsCoordinateDecimalPlaces);
 
                 const accuracyMeters = Number(position.coords && position.coords.accuracy);
-                const accuracyText = Number.isFinite(accuracyMeters)
-                    ? " (accuracy +/- " + Math.round(accuracyMeters) + " m)"
-                    : "";
+                let accuracyText = "";
+                let accuracyClass = null;
 
-                setGpsStatusMessage("GPS coordinates updated from phone location" + accuracyText + ".", false);
+                if (Number.isFinite(accuracyMeters)) {
+                    const roundedAccuracy = Math.round(accuracyMeters);
+                    accuracyText = " (accuracy +/- " + roundedAccuracy + " m)";
+                    accuracyClass = roundedAccuracy <= 10 ? "is-good" : roundedAccuracy <= 25 ? "is-warn" : "is-poor";
+                }
+
+                setGpsStatusMessage("GPS coordinates updated from phone location" + accuracyText + ".", false, accuracyClass);
             }
 
             if (elements.useCurrentGpsButton) {

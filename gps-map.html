@@ -105,6 +105,26 @@
             accent-color: #b21e1e;
         }
 
+        .map-toggle-group {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.88rem;
+            color: #2b3a34;
+        }
+
+        .map-toggle-group label {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+        }
+
+        .map-toggle-group input[type="radio"] {
+            cursor: pointer;
+            accent-color: #b21e1e;
+        }
+
         .map-legend {
             display: flex;
             align-items: center;
@@ -154,8 +174,19 @@
             overflow: auto;
         }
 
-        .point-list li {
+        .point-list li,
+        .point-list-item {
             font-size: 0.9rem;
+            cursor: pointer;
+            border-radius: 6px;
+            padding: 3px 6px;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .point-list li:hover,
+        .point-list-item:hover {
+            background: rgba(178, 30, 30, 0.09);
+            color: #8b1f1f;
         }
 
         @media (max-width: 720px) {
@@ -178,10 +209,17 @@
         <div id="gpsMapCanvas" class="map-canvas" role="img" aria-label="Map with plotted GPS points"></div>
 
         <div class="map-controls">
-            <label class="map-toggle">
-                <input type="checkbox" id="connectPointsToggle">
-                Connect points in save order
-            </label>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
+                <label class="map-toggle">
+                    <input type="checkbox" id="connectPointsToggle">
+                    Connect points in save order
+                </label>
+                <fieldset class="map-toggle-group" style="border: none; padding: 0; margin: 0;">
+                    <legend style="display: inline; font-size: 0.88rem; font-weight: 700; color: #2b3a34; margin-right: 8px;">Map:</legend>
+                    <label><input type="radio" name="mapLayer" value="satellite" id="mapLayerSatellite"> Satellite</label>
+                    <label><input type="radio" name="mapLayer" value="topo" id="mapLayerTopo" checked> Topo</label>
+                </fieldset>
+            </div>
             <div id="gpsTypeLegend" class="map-legend" aria-label="Point type legend"></div>
         </div>
 
