@@ -3081,29 +3081,42 @@ function renderSavedStps() {
         const card = document.createElement("article");
         card.className = "saved-stp";
 
-        const header = document.createElement("div");
-        header.className = "saved-stp-head";
-
-        const titleWrap = document.createElement("div");
+        const titleRow = document.createElement("div");
+        titleRow.className = "saved-stp-title-row";
         const title = document.createElement("h3");
-        setHighlightedText(title, stp.stpLabel, searchTerm);
+        title.className = "saved-stp-title";
+        setHighlightedText(title, "STP " + stp.stpLabel, searchTerm);
+        titleRow.appendChild(title);
+        card.appendChild(titleRow);
 
-        const meta = document.createElement("p");
-        meta.className = "saved-stp-meta";
+        const stpInfo = document.createElement("div");
+        stpInfo.className = "saved-stp-info";
 
-        const type = getEntryTypeLabel(stp.entryType);
-        const supDisplay = stp.supDirection ? (" | Sup " + stp.supDirection) : "";
-        const parentDisplay = stp.parentStp ? (" | Parent " + stp.parentStp) : "";
-        const gpsDisplay = (stp.gpsLatitude || stp.gpsLongitude)
-            ? (" | GPS " + (stp.gpsLatitude || "-") + ", " + (stp.gpsLongitude || "-"))
-            : "";
+        function addStpField(label, value) {
+            if (!value) return;
+            const cell = document.createElement("div");
+            cell.className = "ssd-cell";
+            const lbl = document.createElement("span");
+            lbl.className = "ssd-label";
+            lbl.textContent = label;
+            const val = document.createElement("span");
+            val.className = "ssd-value";
+            val.textContent = value;
+            cell.appendChild(lbl);
+            cell.appendChild(val);
+            stpInfo.appendChild(cell);
+        }
 
-        const metaText = stp.siteName + " | " + stp.siteLocation + " | " + type + parentDisplay + supDisplay + gpsDisplay + " | " + (stp.depthUnit || "metric") + " | " + stp.strata.length + (stp.strata.length === 1 ? " stratum" : " strata");
-        setHighlightedText(meta, metaText, searchTerm);
-
-        titleWrap.appendChild(title);
-        titleWrap.appendChild(meta);
-        header.appendChild(titleWrap);
+        addStpField("Site", stp.siteName);
+        addStpField("Location", stp.siteLocation);
+        addStpField("Type", getEntryTypeLabel(stp.entryType));
+        if (stp.parentStp) { addStpField("Parent STP", stp.parentStp); }
+        if (stp.supDirection) { addStpField("Sup Direction", stp.supDirection); }
+        if (stp.gpsLatitude || stp.gpsLongitude) {
+            addStpField("GPS", (stp.gpsLatitude || "-") + ", " + (stp.gpsLongitude || "-"));
+        }
+        addStpField("Depth Unit", stp.depthUnit || "metric");
+        card.appendChild(stpInfo);
 
         const strataContainer = document.createElement("div");
         strataContainer.className = "saved-strata-list";
@@ -3170,7 +3183,6 @@ function renderSavedStps() {
             strataContainer.appendChild(item);
         });
 
-        card.appendChild(header);
         card.appendChild(strataContainer);
         elements.savedStpList.appendChild(card);
     });
