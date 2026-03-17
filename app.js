@@ -3121,7 +3121,11 @@ function renderSavedStps() {
         const strataContainer = document.createElement("div");
         strataContainer.className = "saved-strata-list";
 
-        stp.strata.forEach(function (stratum) {
+        const sortedStrata = stp.strata.slice().sort(function (a, b) {
+            return Number(a.stratumLabel) - Number(b.stratumLabel);
+        });
+
+        sortedStrata.forEach(function (stratum) {
             const item = document.createElement("div");
             item.className = "saved-stratum-item";
 
@@ -3321,8 +3325,11 @@ function buildFlatExportRows() {
     state.stps.forEach(function (stp) {
         const exportStp = getExportStpLabel(stp);
         const stpParts = parseStpLabel(exportStp);
+        const sortedStrata = stp.strata.slice().sort(function (a, b) {
+            return Number(a.stratumLabel) - Number(b.stratumLabel);
+        });
 
-        stp.strata.forEach(function (stratum) {
+        sortedStrata.forEach(function (stratum) {
             const photoNames = getStratumPhotoNames(stratum).join("; ");
 
             rows.push({
