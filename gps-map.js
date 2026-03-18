@@ -113,6 +113,18 @@ function initializeGpsMapPage() {
 }
 
 function loadGpsMapPayload() {
+    // Try URL hash first — used when navigating same-tab on PWA/iOS
+    try {
+        const hash = window.location.hash || "";
+        const hashMatch = /[#&]payload=([^&]+)/.exec(hash);
+        if (hashMatch) {
+            const decoded = decodeURIComponent(hashMatch[1]);
+            return JSON.parse(decoded);
+        }
+    } catch (_error) {
+        // fall through to storage fallbacks
+    }
+
     let rawValue = "";
 
     try {
