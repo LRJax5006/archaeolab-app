@@ -190,10 +190,85 @@ h1 {
     border-color: var(--orange-dark);
 }
 
+.flow-progress-rail {
+    margin-top: 12px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 8px;
+}
+
+.flow-progress-step {
+    border: 2px solid var(--line);
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    text-align: left;
+    color: var(--ink);
+}
+
+.flow-progress-step:hover {
+    border-color: var(--gold-dark);
+}
+
+.flow-progress-step:focus-visible {
+    outline: 3px solid rgba(218, 108, 22, 0.45);
+    outline-offset: 1px;
+}
+
+.flow-progress-step.is-active {
+    border-color: var(--orange-dark);
+    background: rgba(218, 108, 22, 0.08);
+}
+
+.flow-progress-step.is-complete {
+    border-color: rgba(31, 122, 60, 0.52);
+    background: rgba(31, 122, 60, 0.1);
+}
+
+.flow-progress-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    font-size: 0.78rem;
+    font-weight: 700;
+    border: 1px solid #d8c9af;
+    background: #f6f1e8;
+    color: var(--ink-soft);
+}
+
+.flow-progress-step.is-active .flow-progress-dot {
+    border-color: var(--orange-dark);
+    background: var(--orange-dark);
+    color: #ffffff;
+}
+
+.flow-progress-step.is-complete .flow-progress-dot {
+    border-color: #1f7a3c;
+    background: #1f7a3c;
+    color: #ffffff;
+}
+
+.flow-progress-label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
 .flow-step-status {
     margin: 10px 0 0;
     color: var(--ink-soft);
     font-size: 0.88rem;
+}
+
+.flow-step-status.is-warning {
+    color: #a43a06;
+    font-weight: 600;
 }
 
 .flow-step-hidden {
@@ -2029,6 +2104,10 @@ body.dark-contrast .map-viewer-img {
     }
 
     .flow-navigator-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .flow-progress-rail {
         grid-template-columns: 1fr;
     }
 

@@ -4,6 +4,7 @@ const filterStorageKey = "archaeolab-ui-filters-v1";
 const contrastModeStorageKey = "archaeolab-contrast-mode-v1";
 const flowModeStorageKey = "archaeolab-flow-mode-v1";
 const fieldModeStorageKey = "archaeolab-field-mode-v1";
+const flowResumeStorageKey = "archaeolab-flow-resume-v1";
 const importQualityModeStorageKey = "archaeolab-import-quality-mode-v1";
 const coreDataBackupStorageKey = "archaeolab-stp-core-backup-v1";
 const projectsCoreBackupStorageKey = "archaeolab-project-latest-core-backup-v1";
@@ -78,6 +79,8 @@ let fieldModeEnabled = true;
 let flowModeEnabled = true;
 let flowSteps = [];
 let activeFlowStepId = "";
+let flowValidationMessage = "";
+let flowFocusToken = "";
 let lastTouchedStratumCard = null;
 let activeEditStpIndex = -1;
 let sessionSavePendingCount = 0;
@@ -538,6 +541,7 @@ function cacheElements() {
     elements.flowNextButton = document.getElementById("flowNextButton");
     elements.fieldModeToggleButton = document.getElementById("fieldModeToggleButton");
     elements.flowToggleButton = document.getElementById("flowToggleButton");
+    elements.flowProgressRail = document.getElementById("flowProgressRail");
     elements.flowStepStatus = document.getElementById("flowStepStatus");
 }
 
@@ -590,6 +594,10 @@ function bindEvents() {
 
     if (elements.flowStepSelect) {
         elements.flowStepSelect.addEventListener("change", handleFlowStepSelectionChange);
+    }
+
+    if (elements.flowProgressRail) {
+        elements.flowProgressRail.addEventListener("click", handleFlowProgressRailClick);
     }
 
     if (elements.flowPrevButton) {
@@ -667,16 +675,19 @@ function bindEvents() {
         updateStpTypeUi();
         refreshPhotoRulesAll();
         updateActiveStpBar();
+        syncFlowNavigatorState(false);
     });
 
     elements.parentStp.addEventListener("change", function () {
         refreshPhotoRulesAll();
         updateActiveStpBar();
+        syncFlowNavigatorState(false);
     });
 
     elements.stpLabel.addEventListener("input", function () {
         refreshPhotoRulesAll();
         updateActiveStpBar();
+        syncFlowNavigatorState(false);
     });
 
     if (elements.jumpToFormButton) {
@@ -712,7 +723,10 @@ function bindEvents() {
     elements.supDirection.addEventListener("change", function () {
         refreshPhotoRulesAll();
         updateActiveStpBar();
+        syncFlowNavigatorState(false);
     });
+
+    document.addEventListener("focusin", handleFlowFocusCapture);
 
     elements.projectSearchInput.addEventListener("input", handleProjectFilterInput);
     elements.projectSearchInput.addEventListener("keydown", handleFilterSearchKeydown);
@@ -738,6 +752,8 @@ function bindEvents() {
             lastTouchedStratumCard = card;
             updateQuickPhotoControls();
         }
+
+        handleFlowFocusCapture(event);
     });
 }
 
@@ -1236,6 +1252,525 @@ function getFlowStepLabel(stepId) {
     return matchingStep ? matchingStep.label : stepId;
 }
 
+function loadFlowResumeState() {
+    try {
+        const rawValue = localStorage.getItem(flowResumeStorageKey);
+
+        if (!rawValue) {
+            return {
+                stepId: "",
+                focusToken: ""
+            };
+        }
+
+        const parsed = JSON.parse(rawValue);
+        const parsedStepId = normalizeSearchToken(parsed && parsed.stepId);
+        const parsedFocusToken = normalizeTextValue(parsed && parsed.focusToken);
+
+        return {
+            stepId: parsedStepId,
+            focusToken: parsedFocusToken
+        };
+    } catch (error) {
+        console.warn("Could not load flow resume state.", error);
+        return {
+            stepId: "",
+            focusToken: ""
+        };
+    }
+}
+
+function persistFlowResumeState() {
+    try {
+        localStorage.setItem(flowResumeStorageKey, JSON.stringify({
+            stepId: activeFlowStepId,
+            focusToken: flowFocusToken,
+            savedAt: new Date().toISOString()
+        }));
+    } catch (error) {
+        console.warn("Could not save flow resume state.", error);
+    }
+}
+
+function clearFlowResumeState() {
+    flowFocusToken = "";
+
+    try {
+        localStorage.removeItem(flowResumeStorageKey);
+    } catch (error) {
+        console.warn("Could not clear flow resume state.", error);
+    }
+}
+
+function getFlowFocusTokenFromElement(targetElement) {
+    if (!(targetElement instanceof HTMLElement)) {
+        return "";
+    }
+
+    const inputElement = targetElement.closest("input, select, textarea");
+
+    if (!inputElement || !inputElement.closest("[data-flow-step]")) {
+        return "";
+    }
+
+    if (inputElement.id) {
+        return "id:" + inputElement.id;
+    }
+
+    const dataField = normalizeTextValue(inputElement.getAttribute("data-field"));
+
+    if (dataField) {
+        const card = inputElement.closest(".stratum-card");
+
+        if (card && elements.strataList) {
+            const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+            const cardIndex = cards.indexOf(card);
+
+            if (cardIndex >= 0) {
+                return "strata:" + String(cardIndex) + ":" + dataField;
+            }
+        }
+
+        return "field:" + dataField;
+    }
+
+    if (inputElement.matches("[data-photo-name-input]")) {
+        const card = inputElement.closest(".stratum-card");
+
+        if (!card || !elements.strataList) {
+            return "";
+        }
+
+        const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+        const cardIndex = cards.indexOf(card);
+        const photoIndex = Number(inputElement.getAttribute("data-photo-index"));
+
+        if (cardIndex >= 0 && Number.isInteger(photoIndex) && photoIndex >= 0) {
+            return "photo-name:" + String(cardIndex) + ":" + String(photoIndex);
+        }
+    }
+
+    return "";
+}
+
+function findFocusableElementFromFlowToken(token) {
+    const normalizedToken = normalizeTextValue(token);
+
+    if (!normalizedToken) {
+        return null;
+    }
+
+    if (normalizedToken.indexOf("id:") === 0) {
+        const targetId = normalizeTextValue(normalizedToken.slice(3));
+        return targetId ? document.getElementById(targetId) : null;
+    }
+
+    if (normalizedToken.indexOf("field:") === 0) {
+        const fieldName = normalizeTextValue(normalizedToken.slice(6));
+        return fieldName ? document.querySelector('[data-field="' + fieldName + '"]') : null;
+    }
+
+    if (normalizedToken.indexOf("strata:") === 0) {
+        const parts = normalizedToken.split(":");
+
+        if (parts.length < 3 || !elements.strataList) {
+            return null;
+        }
+
+        const cardIndex = Number(parts[1]);
+        const fieldName = normalizeTextValue(parts[2]);
+
+        if (!Number.isInteger(cardIndex) || cardIndex < 0 || !fieldName) {
+            return null;
+        }
+
+        const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+        const card = cards[Math.min(cardIndex, Math.max(0, cards.length - 1))];
+
+        return card
+            ? card.querySelector('[data-field="' + fieldName + '"]')
+            : null;
+    }
+
+    if (normalizedToken.indexOf("photo-name:") === 0) {
+        const parts = normalizedToken.split(":");
+
+        if (parts.length < 3 || !elements.strataList) {
+            return null;
+        }
+
+        const cardIndex = Number(parts[1]);
+        const photoIndex = Number(parts[2]);
+
+        if (!Number.isInteger(cardIndex) || cardIndex < 0 || !Number.isInteger(photoIndex) || photoIndex < 0) {
+            return null;
+        }
+
+        const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+        const card = cards[Math.min(cardIndex, Math.max(0, cards.length - 1))];
+
+        if (!card) {
+            return null;
+        }
+
+        return card.querySelector('[data-photo-name-input][data-photo-index="' + String(photoIndex) + '"]');
+    }
+
+    return null;
+}
+
+function focusFlowField(field, shouldReportValidity) {
+    if (!(field instanceof HTMLElement)) {
+        return false;
+    }
+
+    if (field.offsetParent === null && !field.closest("dialog[open]")) {
+        return false;
+    }
+
+    field.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    if (typeof field.focus === "function") {
+        field.focus();
+    }
+
+    if (shouldReportValidity && typeof field.reportValidity === "function") {
+        field.reportValidity();
+    }
+
+    return true;
+}
+
+function focusFirstFieldInFlowStep(stepId) {
+    const stepElements = getFlowStepElementsById(stepId);
+
+    for (const stepElement of stepElements) {
+        const candidate = stepElement.querySelector("input, select, textarea, button");
+
+        if (candidate instanceof HTMLElement && focusFlowField(candidate, false)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function restoreFlowFocusFromResumeToken() {
+    const resumeField = findFocusableElementFromFlowToken(flowFocusToken);
+
+    if (!resumeField) {
+        focusFirstFieldInFlowStep(activeFlowStepId);
+        return;
+    }
+
+    window.setTimeout(function () {
+        if (!focusFlowField(resumeField, false)) {
+            focusFirstFieldInFlowStep(activeFlowStepId);
+        }
+    }, 0);
+}
+
+function handleFlowFocusCapture(event) {
+    const focusToken = getFlowFocusTokenFromElement(event && event.target);
+
+    if (!focusToken || focusToken === flowFocusToken) {
+        return;
+    }
+
+    flowFocusToken = focusToken;
+    persistFlowResumeState();
+}
+
+function getSiteFlowStepValidation() {
+    const requiredFields = [
+        {
+            field: elements.siteName,
+            label: "Site Name"
+        },
+        {
+            field: elements.siteLocation,
+            label: "Site Location"
+        },
+        {
+            field: elements.stpLabel,
+            label: "Current STP Label"
+        }
+    ];
+
+    for (const requiredField of requiredFields) {
+        if (!requiredField.field || !normalizeTextValue(requiredField.field.value)) {
+            return {
+                complete: false,
+                message: "Complete Site Details before moving forward. Add " + requiredField.label + ".",
+                focusField: requiredField.field || null
+            };
+        }
+    }
+
+    const entryType = normalizeEntryTypeValue(elements.stpEntryType && elements.stpEntryType.value);
+
+    if (entryType === "supplemental" && !normalizeTextValue(elements.parentStp && elements.parentStp.value)) {
+        return {
+            complete: false,
+            message: "Choose a parent base STP before moving forward with a supplemental entry.",
+            focusField: elements.parentStp || null
+        };
+    }
+
+    return {
+        complete: true,
+        message: "",
+        focusField: null
+    };
+}
+
+function getStrataFlowStepValidation() {
+    const cards = elements.strataList
+        ? Array.from(elements.strataList.querySelectorAll(".stratum-card"))
+        : [];
+    const requiredFieldDetails = [
+        {
+            fieldName: "stratumLabel",
+            label: "Stratum Label"
+        },
+        {
+            fieldName: "depth",
+            label: "Depth"
+        },
+        {
+            fieldName: "munsell",
+            label: "Munsell"
+        },
+        {
+            fieldName: "soilType",
+            label: "Soil Type"
+        },
+        {
+            fieldName: "horizon",
+            label: "Horizon"
+        }
+    ];
+
+    if (cards.length === 0) {
+        return {
+            complete: false,
+            message: "Add at least one stratum before moving forward.",
+            focusField: elements.addStratumButton || null
+        };
+    }
+
+    for (const card of cards) {
+        const stratumLabelField = card.querySelector('[data-field="stratumLabel"]');
+        const stratumLabel = normalizeTextValue(stratumLabelField && stratumLabelField.value) || "(current stratum)";
+
+        for (const requiredFieldDetail of requiredFieldDetails) {
+            const field = card.querySelector('[data-field="' + requiredFieldDetail.fieldName + '"]');
+
+            if (!field || !normalizeTextValue(field.value)) {
+                return {
+                    complete: false,
+                    message: "Complete Stratum "
+                        + stratumLabel
+                        + " before moving forward. Fill "
+                        + requiredFieldDetail.label
+                        + ".",
+                    focusField: field || stratumLabelField || null
+                };
+            }
+        }
+
+        const depthField = card.querySelector('[data-field="depth"]');
+        const depthValue = normalizeTextValue(depthField && depthField.value);
+
+        if (!depthValue) {
+            return {
+                complete: false,
+                message: "Enter a valid depth value for Stratum " + stratumLabel + " before moving forward.",
+                focusField: depthField
+            };
+        }
+    }
+
+    const invalidPhotoCard = findFirstInvalidPhotoCard();
+
+    if (invalidPhotoCard) {
+        return {
+            complete: false,
+            message: "Fix invalid photo names before moving forward.",
+            focusField: invalidPhotoCard.querySelector("[data-photo-name-input]")
+                || invalidPhotoCard.querySelector('[data-field="photos"]')
+                || null
+        };
+    }
+
+    return {
+        complete: true,
+        message: "",
+        focusField: null
+    };
+}
+
+function getSavedFlowStepValidation() {
+    if (state.stps.length > 0) {
+        return {
+            complete: true,
+            message: "",
+            focusField: null
+        };
+    }
+
+    return {
+        complete: false,
+        message: "Save at least one STP before moving to Wrap Up.",
+        focusField: null
+    };
+}
+
+function getFlowStepValidation(stepId) {
+    const normalizedStepId = normalizeSearchToken(stepId);
+
+    if (normalizedStepId === "site") {
+        return getSiteFlowStepValidation();
+    }
+
+    if (normalizedStepId === "strata") {
+        return getStrataFlowStepValidation();
+    }
+
+    if (normalizedStepId === "saved") {
+        return getSavedFlowStepValidation();
+    }
+
+    if (normalizedStepId === "wrap") {
+        return getSavedFlowStepValidation();
+    }
+
+    return {
+        complete: true,
+        message: "",
+        focusField: null
+    };
+}
+
+function buildFlowCompletionState(availableSteps) {
+    const completionState = {};
+
+    availableSteps.forEach(function (step) {
+        completionState[step.id] = getFlowStepValidation(step.id).complete;
+    });
+
+    return completionState;
+}
+
+function renderFlowProgressRail(availableSteps, completionState) {
+    if (!elements.flowProgressRail) {
+        return;
+    }
+
+    elements.flowProgressRail.innerHTML = "";
+    elements.flowProgressRail.hidden = availableSteps.length === 0;
+
+    availableSteps.forEach(function (step, index) {
+        const isActive = step.id === activeFlowStepId;
+        const isComplete = Boolean(completionState[step.id]);
+        const button = document.createElement("button");
+        const dot = document.createElement("span");
+        const label = document.createElement("span");
+
+        button.type = "button";
+        button.className = "flow-progress-step";
+        button.setAttribute("role", "listitem");
+        button.setAttribute("data-flow-step-target", step.id);
+        button.setAttribute("aria-label", (isComplete ? "Completed" : "Incomplete") + " step: " + step.label);
+
+        if (isActive) {
+            button.classList.add("is-active");
+            button.setAttribute("aria-current", "step");
+        }
+
+        if (isComplete) {
+            button.classList.add("is-complete");
+        }
+
+        dot.className = "flow-progress-dot";
+        dot.setAttribute("aria-hidden", "true");
+        dot.textContent = isComplete ? "\u2713" : String(index + 1);
+
+        label.className = "flow-progress-label";
+        label.textContent = step.label;
+
+        button.appendChild(dot);
+        button.appendChild(label);
+        elements.flowProgressRail.appendChild(button);
+    });
+}
+
+function getForwardFlowValidationBlock(availableSteps, targetStepId) {
+    const normalizedTargetStepId = normalizeSearchToken(targetStepId);
+    const currentIndexRaw = availableSteps.findIndex(function (step) {
+        return step.id === activeFlowStepId;
+    });
+    const targetIndex = availableSteps.findIndex(function (step) {
+        return step.id === normalizedTargetStepId;
+    });
+    const currentIndex = currentIndexRaw >= 0 ? currentIndexRaw : 0;
+
+    if (targetIndex <= currentIndex) {
+        return null;
+    }
+
+    for (let index = currentIndex; index < targetIndex; index += 1) {
+        const step = availableSteps[index];
+        const validation = getFlowStepValidation(step.id);
+
+        if (!validation.complete) {
+            return {
+                step: step,
+                validation: validation
+            };
+        }
+    }
+
+    return null;
+}
+
+function attemptFlowStepNavigation(stepId, shouldScroll) {
+    const normalizedStepId = normalizeSearchToken(stepId);
+
+    if (!normalizedStepId) {
+        return false;
+    }
+
+    const availableSteps = getAvailableFlowSteps();
+    const targetStep = availableSteps.find(function (step) {
+        return step.id === normalizedStepId;
+    });
+
+    if (!targetStep) {
+        return false;
+    }
+
+    const block = getForwardFlowValidationBlock(availableSteps, normalizedStepId);
+
+    if (block) {
+        flowValidationMessage = block.validation.message
+            || ("Complete " + block.step.label + " before moving forward.");
+
+        if (activeFlowStepId !== block.step.id) {
+            setActiveFlowStep(block.step.id, true);
+        } else {
+            syncFlowNavigatorState(false);
+        }
+
+        focusFlowField(block.validation.focusField, true);
+        return false;
+    }
+
+    flowValidationMessage = "";
+    setActiveFlowStep(normalizedStepId, shouldScroll);
+    return true;
+}
+
 function updateFlowToggleButton() {
     if (!elements.flowToggleButton) {
         return;
@@ -1347,7 +1882,10 @@ function syncFlowNavigatorState(shouldScrollToActiveStep) {
 
     const modeText = flowModeEnabled ? "Flow pages on." : "Flow pages off.";
     const fieldModeText = fieldModeEnabled ? "Field mode on." : "Field mode off.";
-    elements.flowStepStatus.textContent = "Step "
+    const completionState = buildFlowCompletionState(availableSteps);
+    renderFlowProgressRail(availableSteps, completionState);
+
+    const baseStatusText = "Step "
         + String(currentIndex + 1)
         + " of "
         + String(availableSteps.length)
@@ -1357,6 +1895,10 @@ function syncFlowNavigatorState(shouldScrollToActiveStep) {
         + modeText
         + " "
         + fieldModeText;
+    elements.flowStepStatus.textContent = flowValidationMessage
+        ? flowValidationMessage
+        : baseStatusText;
+    elements.flowStepStatus.classList.toggle("is-warning", Boolean(flowValidationMessage));
 
     updateFieldModeToggleButton();
     applyFlowStepVisibility();
@@ -1375,6 +1917,7 @@ function setActiveFlowStep(stepId, shouldScroll) {
     }
 
     activeFlowStepId = normalizedStepId;
+    persistFlowResumeState();
     syncFlowNavigatorState(Boolean(shouldScroll));
 }
 
@@ -1421,8 +1964,27 @@ function initializeFlowNavigator() {
     flowModeEnabled = storedFlowMode !== "off";
     fieldModeEnabled = storedFieldMode !== "off";
     applyFieldModeSectionVisibility();
-    activeFlowStepId = fieldModeEnabled ? "site" : flowSteps[0].id;
+
+    const resume = loadFlowResumeState();
+    const candidateStepId = resume.stepId;
+    const candidateStepExists = candidateStepId
+        && flowSteps.some(function (step) {
+            return step.id === candidateStepId;
+        });
+
+    if (candidateStepExists) {
+        activeFlowStepId = candidateStepId;
+        flowFocusToken = resume.focusToken;
+    } else {
+        activeFlowStepId = fieldModeEnabled ? "site" : flowSteps[0].id;
+        flowFocusToken = "";
+    }
+
     syncFlowNavigatorState(false);
+
+    if (candidateStepExists && flowFocusToken) {
+        restoreFlowFocusFromResumeToken();
+    }
 }
 
 function handleFlowStepSelectionChange() {
@@ -1430,7 +1992,7 @@ function handleFlowStepSelectionChange() {
         return;
     }
 
-    setActiveFlowStep(elements.flowStepSelect.value, true);
+    attemptFlowStepNavigation(elements.flowStepSelect.value, true);
 }
 
 function handleFlowStepPrevious() {
@@ -1448,6 +2010,7 @@ function handleFlowStepPrevious() {
         return;
     }
 
+    flowValidationMessage = "";
     setActiveFlowStep(availableSteps[currentIndex - 1].id, true);
 }
 
@@ -1466,11 +2029,22 @@ function handleFlowStepNext() {
         return;
     }
 
-    setActiveFlowStep(availableSteps[currentIndex + 1].id, true);
+    attemptFlowStepNavigation(availableSteps[currentIndex + 1].id, true);
 }
 
 function handleFlowToggle() {
     applyFlowMode(!flowModeEnabled, true, false);
+}
+
+function handleFlowProgressRailClick(event) {
+    const button = event.target.closest("[data-flow-step-target]");
+
+    if (!button) {
+        return;
+    }
+
+    const targetStepId = normalizeSearchToken(button.getAttribute("data-flow-step-target"));
+    attemptFlowStepNavigation(targetStepId, true);
 }
 
 function applyFieldMode(enabled, shouldPersist, shouldScrollToDefaultStep) {
@@ -1490,6 +2064,7 @@ function applyFieldMode(enabled, shouldPersist, shouldScrollToDefaultStep) {
         activeFlowStepId = "site";
     }
 
+    flowValidationMessage = "";
     syncFlowNavigatorState(Boolean(shouldScrollToDefaultStep));
 }
 
