@@ -771,6 +771,26 @@ h1 {
     gap: 10px;
 }
 
+.backup-destination-row {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 14px;
+}
+
+.backup-destination-status {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.backup-destination-status.is-warning {
+    color: var(--error);
+}
+
 button {
     border: 2px solid transparent;
     border-radius: 999px;
@@ -1878,6 +1898,11 @@ body.dark-contrast .map-viewer-img {
     .saved-stp-head,
     .form-actions,
     .section-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .backup-destination-row {
         flex-direction: column;
         align-items: stretch;
     }

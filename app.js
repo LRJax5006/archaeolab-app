@@ -11,6 +11,7 @@ const fileHandlesStore = "file-handles";
 const appDataDatabaseVersion = 2;
 const appDataSessionEntryKey = "session";
 const appDataProjectsEntryKey = "projects";
+const appJsonBackupHandleKey = "session-json-backup:app-default";
 const gpsMapPayloadStorageKey = "archaeolab-gps-map-payload-v1";
 const sessionBackupFormatVersion = 2;
 const maxProjectImageSizeBytes = 4 * 1024 * 1024;
@@ -68,6 +69,9 @@ let referencePhotoPreviewTitle = "";
 let referencePhotoPreviewHint = "";
 let referencePhotoPreviewKind = "";
 let referencePhotoPreviewEntryKey = "";
+let designatedJsonBackupFileName = "";
+let designatedJsonBackupLastSavedAt = "";
+let backupDestinationStatusRequestId = 0;
 let lastTouchedStratumCard = null;
 let activeEditStpIndex = -1;
 let sessionSavePendingCount = 0;
@@ -357,6 +361,7 @@ async function initializeApp() {
     registerServiceWorker();
     setupPwaInstallPrompt();
     updateActiveStpBar();
+    await updateBackupDestinationStatus();
 }
 
 function registerServiceWorker() {
@@ -456,6 +461,8 @@ function cacheElements() {
     elements.exportJsonButton = document.getElementById("exportJsonButton");
     elements.importJsonButton = document.getElementById("importJsonButton");
     elements.importJsonInput = document.getElementById("importJsonInput");
+    elements.setBackupFileButton = document.getElementById("setBackupFileButton");
+    elements.backupDestinationStatus = document.getElementById("backupDestinationStatus");
     elements.clearSessionButton = document.getElementById("clearSessionButton");
     elements.highContrastToggle = document.getElementById("highContrastToggle");
     elements.importQualityToggle = document.getElementById("importQualityToggle");
@@ -552,6 +559,9 @@ function bindEvents() {
     elements.exportJsonButton.addEventListener("click", downloadSessionData);
     elements.importJsonButton.addEventListener("click", requestImportSessionFile);
     elements.importJsonInput.addEventListener("change", handleImportSessionFile);
+    if (elements.setBackupFileButton) {
+        elements.setBackupFileButton.addEventListener("click", handleSetBackupFileClick);
+    }
     elements.clearSessionButton.addEventListener("click", clearSession);
 
     if (elements.wrapUpXlsxButton) {
@@ -4402,6 +4412,10 @@ function triggerJsonDownload(jsonText, filename) {
     URL.revokeObjectURL(downloadUrl);
 }
 
+function supportsDesignatedBackupFile() {
+    return typeof window.showSaveFilePicker === "function" && supportsIndexedDbPersistence();
+}
+
 function buildSessionBackupFilenameBase() {
     return (state.siteName || "archaeolab-stp-session")
         .toLowerCase()
@@ -4409,17 +4423,173 @@ function buildSessionBackupFilenameBase() {
         .replace(/^-+|-+$/g, "");
 }
 
-function buildJsonBackupHandleKey(siteSlug) {
+function buildJsonBackupHandleLegacyKey(siteSlug) {
     return "session-json-backup:" + siteSlug;
 }
 
-async function resolveDesignatedJsonBackupHandle(siteSlug, suggestedName, shouldPromptIfMissing) {
-    if (typeof window.showSaveFilePicker !== "function" || !supportsIndexedDbPersistence()) {
+function buildJsonBackupHandleKey() {
+    return appJsonBackupHandleKey;
+}
+
+function formatBackupSavedAt(value) {
+    if (!value) {
+        return "";
+    }
+
+    try {
+        const dateValue = new Date(value);
+        if (Number.isNaN(dateValue.getTime())) {
+            return "";
+        }
+
+        return dateValue.toLocaleString();
+    } catch (_error) {
+        return "";
+    }
+}
+
+function setBackupDestinationStatusMessage(text, isWarning) {
+    if (!elements.backupDestinationStatus) {
+        return;
+    }
+
+    elements.backupDestinationStatus.textContent = text;
+    elements.backupDestinationStatus.classList.toggle("is-warning", Boolean(isWarning));
+}
+
+async function readStoredDesignatedJsonBackupHandle(siteSlug) {
+    const primaryHandleKey = buildJsonBackupHandleKey();
+    let fileHandle = await readFileHandle(primaryHandleKey);
+
+    if (fileHandle) {
+        return {
+            fileHandle: fileHandle,
+            storageKey: primaryHandleKey
+        };
+    }
+
+    const legacyHandleKey = buildJsonBackupHandleLegacyKey(siteSlug);
+
+    if (legacyHandleKey !== primaryHandleKey) {
+        fileHandle = await readFileHandle(legacyHandleKey);
+
+        if (fileHandle) {
+            await writeFileHandle(primaryHandleKey, fileHandle);
+            return {
+                fileHandle: fileHandle,
+                storageKey: legacyHandleKey
+            };
+        }
+    }
+
+    return {
+        fileHandle: null,
+        storageKey: ""
+    };
+}
+
+async function updateBackupDestinationStatus(options) {
+    if (!elements.backupDestinationStatus) {
+        return;
+    }
+
+    if (elements.setBackupFileButton) {
+        elements.setBackupFileButton.hidden = !supportsDesignatedBackupFile();
+    }
+
+    if (!supportsDesignatedBackupFile()) {
+        setBackupDestinationStatusMessage(
+            "Persistent app backup file is not supported in this browser. JSON backups download through the browser instead.",
+            true
+        );
+        return;
+    }
+
+    const requestId = backupDestinationStatusRequestId + 1;
+    backupDestinationStatusRequestId = requestId;
+
+    const siteSlug = buildFilenameBase() || "archaeolab-stp-export";
+    const storedHandle = await readStoredDesignatedJsonBackupHandle(siteSlug);
+
+    if (requestId !== backupDestinationStatusRequestId) {
+        return;
+    }
+
+    const normalizedOptions = options && typeof options === "object" ? options : {};
+    const fileName = normalizeTextValue(normalizedOptions.fileName)
+        || normalizeTextValue(storedHandle.fileHandle && storedHandle.fileHandle.name)
+        || designatedJsonBackupFileName;
+
+    if (normalizedOptions.savedAt) {
+        designatedJsonBackupLastSavedAt = normalizedOptions.savedAt;
+    }
+
+    if (!fileName) {
+        designatedJsonBackupFileName = "";
+        setBackupDestinationStatusMessage(
+            "App backup file not set. Use Set App Backup File so JSON backups always save to the same place.",
+            true
+        );
+        return;
+    }
+
+    designatedJsonBackupFileName = fileName;
+    const savedAtText = formatBackupSavedAt(designatedJsonBackupLastSavedAt);
+    const summarySuffix = savedAtText ? " Last JSON save: " + savedAtText + "." : "";
+
+    setBackupDestinationStatusMessage(
+        "App backup file: " + designatedJsonBackupFileName + "." + summarySuffix,
+        false
+    );
+}
+
+async function handleSetBackupFileClick() {
+    if (!supportsDesignatedBackupFile()) {
+        alert("This browser does not support choosing a persistent app backup file. Use Download JSON Backup + Photos.");
+        return;
+    }
+
+    const siteSlug = buildFilenameBase() || "archaeolab-stp-export";
+    const suggestedName = (buildSessionBackupFilenameBase() || "archaeolab-stp-session") + ".json";
+
+    try {
+        const fileHandle = await resolveDesignatedJsonBackupHandle(siteSlug, suggestedName, true, true);
+
+        if (!fileHandle) {
+            return;
+        }
+
+        designatedJsonBackupFileName = normalizeTextValue(fileHandle.name) || suggestedName;
+        await updateBackupDestinationStatus({
+            fileName: designatedJsonBackupFileName
+        });
+        setReferencePhotoMessage(
+            "App backup file set to " + designatedJsonBackupFileName + ". JSON backups now save there.",
+            false
+        );
+    } catch (error) {
+        if (error && error.name === "AbortError") {
+            return;
+        }
+
+        console.warn("Could not set app backup file.", error);
+        alert("Could not set app backup file.");
+    }
+}
+
+async function resolveDesignatedJsonBackupHandle(siteSlug, suggestedName, shouldPromptIfMissing, forcePrompt) {
+    if (!supportsDesignatedBackupFile()) {
         return null;
     }
 
-    const handleKey = buildJsonBackupHandleKey(siteSlug);
-    let fileHandle = await readFileHandle(handleKey);
+    const handleKey = buildJsonBackupHandleKey();
+    const shouldForcePrompt = Boolean(forcePrompt);
+    let fileHandle = null;
+
+    if (!shouldForcePrompt) {
+        const storedHandle = await readStoredDesignatedJsonBackupHandle(siteSlug);
+        fileHandle = storedHandle.fileHandle;
+    }
 
     if (fileHandle) {
         const permission = await fileHandle.queryPermission({ mode: "readwrite" });
@@ -4464,11 +4634,20 @@ async function saveJsonBackupToPreferredDestination(backupPayload, options) {
                 await writable.write(jsonText);
                 await writable.close();
 
+                const savedAt = new Date().toISOString();
+                designatedJsonBackupFileName = normalizeTextValue(fileHandle.name) || suggestedName;
+                designatedJsonBackupLastSavedAt = savedAt;
+                await updateBackupDestinationStatus({
+                    fileName: designatedJsonBackupFileName,
+                    savedAt: savedAt
+                });
+
                 return {
                     savedToDesignatedFile: true,
                     downloaded: false,
                     cancelled: false,
-                    unavailable: false
+                    unavailable: false,
+                    fileName: designatedJsonBackupFileName
                 };
             }
         } catch (error) {
@@ -4477,7 +4656,8 @@ async function saveJsonBackupToPreferredDestination(backupPayload, options) {
                     savedToDesignatedFile: false,
                     downloaded: false,
                     cancelled: true,
-                    unavailable: false
+                    unavailable: false,
+                    fileName: ""
                 };
             }
 
@@ -4491,7 +4671,8 @@ async function saveJsonBackupToPreferredDestination(backupPayload, options) {
             savedToDesignatedFile: false,
             downloaded: true,
             cancelled: false,
-            unavailable: !supportsDesignatedFile
+            unavailable: !supportsDesignatedFile,
+            fileName: suggestedName
         };
     }
 
@@ -4499,7 +4680,8 @@ async function saveJsonBackupToPreferredDestination(backupPayload, options) {
         savedToDesignatedFile: false,
         downloaded: false,
         cancelled: false,
-        unavailable: !supportsDesignatedFile
+        unavailable: !supportsDesignatedFile,
+        fileName: ""
     };
 }
 
@@ -4517,12 +4699,15 @@ async function saveAutoJsonBackupAfterStpSave() {
         const missingPhotoCount = backupPayload.missingPhotoIds.length;
 
         if (backupResult.savedToDesignatedFile) {
+            const destinationFile = backupResult.fileName || "the designated app backup file";
             setReferencePhotoMessage(
                 missingPhotoCount > 0
-                    ? "Auto JSON backup updated in designated file, but "
+                    ? "Auto JSON backup updated in "
+                        + destinationFile
+                        + ", but "
                         + String(missingPhotoCount)
                         + " photo(s) were already missing from app storage and were not included."
-                    : "Auto JSON backup updated in designated backup file.",
+                    : "Auto JSON backup updated in " + destinationFile + ".",
                 missingPhotoCount > 0
             );
             return;
@@ -4579,8 +4764,8 @@ async function downloadSessionData() {
         }
 
         const destinationText = backupResult.savedToDesignatedFile
-            ? "to the designated backup file"
-            : "as a download";
+            ? "to " + (backupResult.fileName || "the designated app backup file")
+            : "as a download (" + (backupResult.fileName || "session backup") + ")";
 
         setReferencePhotoMessage(
             missingPhotoCount > 0
