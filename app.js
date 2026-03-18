@@ -1989,7 +1989,6 @@ function addStratumCard(defaults) {
     });
 
     if (defaults && Array.isArray(defaults.photos)) {
-    refreshStratumSuggestionsAll();
         setCardPhotoEntries(newCard, defaults.photos);
     } else if (defaults && Array.isArray(defaults.photoNames)) {
         setCardPhotoNames(newCard, defaults.photoNames);
@@ -2000,6 +1999,7 @@ function addStratumCard(defaults) {
     renumberStrata();
     applyDepthUnitUi();
     updatePhotoRuleForCard(newCard);
+    refreshStratumSuggestionsAll();
     updateActiveStpBar();
 }
 
