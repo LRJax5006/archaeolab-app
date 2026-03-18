@@ -13,6 +13,20 @@
     <link rel="stylesheet" href="app.css">
 </head>
 <body>
+    <div id="activeStpBar" class="active-stp-bar">
+        <div class="active-stp-bar-left">
+            <span id="activeStpSiteName" class="active-stp-site" hidden></span>
+            <span class="active-stp-sep" id="activeStpSep" aria-hidden="true" hidden> › </span>
+            <strong id="activeStpLbl" class="active-stp-lbl">New STP</strong>
+            <span id="activeStpStratumCount" class="active-stp-strata"></span>
+        </div>
+        <div class="active-stp-bar-right">
+            <span id="activeStpSaveIndicator" class="active-stp-dot" title="Session saved"></span>
+            <button type="button" id="activeStpPhotoButton" class="active-stp-btn" title="Take photo for current stratum">Stratum Photo <span class="photo-chip" hidden></span></button>
+            <button type="button" id="activeReferencePhotoButton" class="active-stp-btn" title="Choose reference photo">Reference Photo <span class="photo-chip" hidden></span></button>
+            <button type="button" id="jumpToFormButton" class="active-stp-btn">&#8595; Entry Form</button>
+        </div>
+    </div>
     <div class="page-shell">
         <div id="pwaInstallBanner" class="pwa-install-banner" hidden>
             <div class="pwa-install-content">
@@ -199,6 +213,10 @@
                                     <input type="text" id="stpLabel" name="stpLabel" placeholder="A1" required>
                                     <button type="button" id="suggestLabelButton" class="secondary-button">Suggest Next</button>
                                 </div>
+                                <div class="inline-photo-actions" aria-label="Quick photo actions">
+                                    <button type="button" id="quickStratumPhotoButton" class="ghost-button quick-photo-button">Current Stratum Photo <span class="photo-chip" hidden></span></button>
+                                    <button type="button" id="quickReferencePhotoButton" class="ghost-button quick-photo-button">Reference Photo <span class="photo-chip" hidden></span></button>
+                                </div>
 
                                 <label class="field">
                                     <span>Supplemental Direction (Sup)</span>
@@ -314,6 +332,21 @@
                 <div id="savedEmptyState" class="empty-state">No STPs saved yet.</div>
                 <div id="savedStpList" class="saved-stp-list"></div>
             </section>
+
+            <section class="panel wrap-up-panel" id="wrapUpPanel" hidden>
+                <div class="section-head">
+                    <div>
+                        <h2>Wrap Up Session</h2>
+                        <p>Session summary &mdash; export when ready to close out or hand off data.</p>
+                    </div>
+                </div>
+                <p id="wrapUpSummaryText" class="wrap-up-summary-text"></p>
+                <div class="wrap-up-actions">
+                    <button type="button" id="wrapUpXlsxButton" class="primary-button">&#8595;&nbsp;Download Excel XLSX</button>
+                    <button type="button" id="wrapUpCsvButton" class="secondary-button">&#8595;&nbsp;CSV Backup</button>
+                    <button type="button" id="wrapUpJsonButton" class="ghost-button">&#8595;&nbsp;JSON Backup</button>
+                </div>
+            </section>
         </main>
     </div>
 
@@ -325,6 +358,11 @@
                     <h3 class="stratum-title">Stratum <span data-row-number></span></h3>
                 </div>
                 <button type="button" class="link-button" data-remove-stratum>Remove</button>
+            </div>
+
+            <div class="stratum-suggestions" data-last-stp-suggestions hidden>
+                <p class="stratum-suggestions-copy" data-last-stp-suggestions-copy></p>
+                <div class="stratum-suggestion-list" data-last-stp-suggestion-list></div>
             </div>
 
             <div class="stratum-grid">

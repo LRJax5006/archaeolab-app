@@ -94,7 +94,10 @@ function initializeGpsMapPage() {
             entryTypeLabel: typeLabel,
             latitude: latitude,
             longitude: longitude,
-            savedAt: toText(point && point.savedAt)
+            savedAt: toText(point && point.savedAt),
+            siteName: toText(point && point.siteName),
+            siteLocation: toText(point && point.siteLocation),
+            strata: Array.isArray(point && point.strata) ? point.strata : []
         };
     }).filter(Boolean);
 
@@ -264,11 +267,11 @@ function renderPointList(points) {
         item.className = "point-list-item";
 
         item.addEventListener("click", function () {
-            if (!mapInstance || !activeMarkers[index]) {
-                return;
+            if (mapInstance && activeMarkers[index]) {
+                mapInstance.setView([point.latitude, point.longitude], 17);
+                activeMarkers[index].openPopup();
             }
-            mapInstance.setView([point.latitude, point.longitude], 17);
-            activeMarkers[index].openPopup();
+            showStpDetail(point);
         });
 
         list.appendChild(item);
@@ -387,12 +390,17 @@ function renderMapLayers() {
             fillOpacity: 0.93
         }).addTo(markerLayer);
 
+        const strataCount = Array.isArray(point.strata) ? point.strata.length : 0;
         const popupHtml = "<strong>" + escapeHtml(point.label || ("Point " + (index + 1))) + "</strong><br>"
             + "<span>" + escapeHtml(typeLabel) + "</span><br>"
             + "<span>" + point.latitude.toFixed(6) + ", " + point.longitude.toFixed(6) + "</span>"
-            + (point.savedAt ? "<br><span>Saved " + escapeHtml(formatSavedAt(point.savedAt)) + "</span>" : "");
+            + (point.savedAt ? "<br><span>Saved " + escapeHtml(formatSavedAt(point.savedAt)) + "</span>" : "")
+            + (strataCount > 0 ? "<br><em>" + strataCount + (strataCount === 1 ? " stratum" : " strata") + " &mdash; see details below</em>" : "");
 
         marker.bindPopup(popupHtml);
+        marker.on("click", function () {
+            showStpDetail(point);
+        });
         activeMarkers.push(marker);
         bounds.push([point.latitude, point.longitude]);
         lineCoordinates.push([point.latitude, point.longitude]);
@@ -425,4 +433,76 @@ function renderMapLayers() {
     const pointSummary = activePoints.length + (activePoints.length === 1 ? " GPS point plotted." : " GPS points plotted.");
     const pathSummary = connectEnabled ? " Connected path on." : " Connected path off.";
     setStatus(pointSummary + pathSummary, false);
+}
+
+function showStpDetail(point) {
+    const section = document.getElementById("stpDetailSection");
+    const panel = document.getElementById("stpDetailPanel");
+
+    if (!section || !panel) {
+        return;
+    }
+
+    panel.innerHTML = "";
+
+    const heading = document.createElement("p");
+    heading.className = "stp-detail-head";
+    heading.textContent = "STP " + (point.label || "")
+        + (point.siteName ? " \u00b7 " + point.siteName : "")
+        + (point.entryTypeLabel ? " (" + point.entryTypeLabel + ")" : "");
+    panel.appendChild(heading);
+
+    const strata = Array.isArray(point.strata) ? point.strata : [];
+
+    if (strata.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "stp-detail-empty";
+        empty.textContent = "No strata data saved for this STP.";
+        panel.appendChild(empty);
+    } else {
+        strata.forEach(function (s) {
+            const row = document.createElement("div");
+            row.className = "stp-stratum-row";
+
+            function addField(labelText, value) {
+                if (!value) {
+                    return;
+                }
+
+                const cell = document.createElement("div");
+                cell.className = "stp-stratum-field";
+
+                const lbl = document.createElement("span");
+                lbl.className = "stp-stratum-label";
+                lbl.textContent = labelText;
+
+                const val = document.createElement("span");
+                val.className = "stp-stratum-value";
+                val.textContent = value;
+
+                cell.appendChild(lbl);
+                cell.appendChild(val);
+                row.appendChild(cell);
+            }
+
+            addField("Stratum", s.stratumLabel);
+            addField("Depth", s.depth);
+            addField("Munsell", s.munsell);
+            addField("Soil Type", s.soilType);
+            addField("Horizon", s.horizon);
+            addField("Artifacts", s.artifactSummary);
+
+            if (s.notes) {
+                const notesEl = document.createElement("p");
+                notesEl.className = "stp-stratum-notes";
+                notesEl.textContent = s.notes;
+                row.appendChild(notesEl);
+            }
+
+            panel.appendChild(row);
+        });
+    }
+
+    section.hidden = false;
+    section.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }

@@ -61,6 +61,7 @@ let appDataDatabasePromise;
 let importQualityMode = "sharp";
 let pendingSavedPhotoOpenName = "";
 let activeMapViewerObjectUrl = "";
+let lastTouchedStratumCard = null;
 let deferredInstallPrompt = null;
 let sessionSaveQueue = Promise.resolve();
 let projectsSaveQueue = Promise.resolve();
@@ -346,6 +347,7 @@ async function initializeApp() {
     updateDataSafetyStatus();
     registerServiceWorker();
     setupPwaInstallPrompt();
+    updateActiveStpBar();
 }
 
 function registerServiceWorker() {
@@ -485,6 +487,21 @@ function cacheElements() {
     elements.savedPhotoOpenInput = document.getElementById("savedPhotoOpenInput");
     elements.pwaInstallBanner = document.getElementById("pwaInstallBanner");
     elements.pwaInstallButton = document.getElementById("pwaInstallButton");
+    elements.activeStpSiteNameEl = document.getElementById("activeStpSiteName");
+    elements.activeStpSepEl = document.getElementById("activeStpSep");
+    elements.activeStpLblEl = document.getElementById("activeStpLbl");
+    elements.activeStpStratumCountEl = document.getElementById("activeStpStratumCount");
+    elements.activeStpSaveIndicator = document.getElementById("activeStpSaveIndicator");
+    elements.activeStpPhotoButton = document.getElementById("activeStpPhotoButton");
+    elements.activeReferencePhotoButton = document.getElementById("activeReferencePhotoButton");
+    elements.jumpToFormButton = document.getElementById("jumpToFormButton");
+    elements.quickStratumPhotoButton = document.getElementById("quickStratumPhotoButton");
+    elements.quickReferencePhotoButton = document.getElementById("quickReferencePhotoButton");
+    elements.wrapUpPanel = document.getElementById("wrapUpPanel");
+    elements.wrapUpSummaryText = document.getElementById("wrapUpSummaryText");
+    elements.wrapUpXlsxButton = document.getElementById("wrapUpXlsxButton");
+    elements.wrapUpCsvButton = document.getElementById("wrapUpCsvButton");
+    elements.wrapUpJsonButton = document.getElementById("wrapUpJsonButton");
 }
 
 function bindEvents() {
@@ -510,6 +527,16 @@ function bindEvents() {
     elements.importJsonButton.addEventListener("click", requestImportSessionFile);
     elements.importJsonInput.addEventListener("change", handleImportSessionFile);
     elements.clearSessionButton.addEventListener("click", clearSession);
+
+    if (elements.wrapUpXlsxButton) {
+        elements.wrapUpXlsxButton.addEventListener("click", downloadExcelReadyXlsx);
+    }
+    if (elements.wrapUpCsvButton) {
+        elements.wrapUpCsvButton.addEventListener("click", downloadExcelReadyCsv);
+    }
+    if (elements.wrapUpJsonButton) {
+        elements.wrapUpJsonButton.addEventListener("click", downloadSessionData);
+    }
 
     if (elements.highContrastToggle) {
         elements.highContrastToggle.addEventListener("click", handleContrastToggle);
@@ -567,7 +594,35 @@ function bindEvents() {
 
     elements.stpLabel.addEventListener("input", function () {
         refreshPhotoRulesAll();
+        updateActiveStpBar();
     });
+
+    if (elements.jumpToFormButton) {
+        elements.jumpToFormButton.addEventListener("click", function () {
+            elements.entryForm.scrollIntoView({ behavior: "smooth", block: "start" });
+            elements.stpLabel.focus();
+        });
+    }
+
+    if (elements.activeStpPhotoButton) {
+        elements.activeStpPhotoButton.addEventListener("click", function () {
+            openStratumPhotoPicker(getCurrentStratumCard(), true);
+        });
+    }
+
+    if (elements.activeReferencePhotoButton) {
+        elements.activeReferencePhotoButton.addEventListener("click", openReferencePhotoPicker);
+    }
+
+    if (elements.quickStratumPhotoButton) {
+        elements.quickStratumPhotoButton.addEventListener("click", function () {
+            openStratumPhotoPicker(getCurrentStratumCard(), false);
+        });
+    }
+
+    if (elements.quickReferencePhotoButton) {
+        elements.quickReferencePhotoButton.addEventListener("click", openReferencePhotoPicker);
+    }
 
     elements.supDirection.addEventListener("change", function () {
         refreshPhotoRulesAll();
@@ -591,6 +646,13 @@ function bindEvents() {
     elements.strataList.addEventListener("click", handleStrataListClick);
     elements.strataList.addEventListener("input", handleStrataListInput);
     elements.strataList.addEventListener("change", handleStrataListChange);
+    elements.strataList.addEventListener("focusin", function (event) {
+        const card = event.target.closest(".stratum-card");
+        if (card) {
+            lastTouchedStratumCard = card;
+            updateQuickPhotoControls();
+        }
+    });
 }
 
 function populateDropdownDatalists() {
@@ -1394,6 +1456,156 @@ function getDataSafetyAlertMessage(contextText) {
     return "";
 }
 
+function getCurrentStratumCard() {
+    if (!elements.strataList) {
+        return null;
+    }
+
+    if (lastTouchedStratumCard && elements.strataList.contains(lastTouchedStratumCard)) {
+        return lastTouchedStratumCard;
+    }
+
+    return elements.strataList.querySelector(".stratum-card");
+}
+
+function openStratumPhotoPicker(card, shouldScrollIntoView) {
+    if (!card) {
+        return false;
+    }
+
+    const cameraInput = card.querySelector('[data-field="cameraPhoto"]');
+
+    if (!cameraInput) {
+        return false;
+    }
+
+    if (shouldScrollIntoView) {
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+
+    cameraInput.value = "";
+
+    try {
+        if (typeof cameraInput.showPicker === "function") {
+            cameraInput.showPicker();
+        } else {
+            cameraInput.click();
+        }
+    } catch (_error) {
+        cameraInput.click();
+    }
+
+    return true;
+}
+
+function updateQuickPhotoControls() {
+    const currentStratumCard = getCurrentStratumCard();
+    const currentStratumField = currentStratumCard
+        ? currentStratumCard.querySelector('[data-field="stratumLabel"]')
+        : null;
+    const currentStratumLabel = normalizeTextValue(currentStratumField && currentStratumField.value);
+    const hasCurrentPhotoTarget = Boolean(currentStratumCard && currentStratumCard.querySelector('[data-field="cameraPhoto"]'));
+    const hasReferencePhotoTarget = Boolean(elements.referencePhotoInput);
+    const currentStratumTitle = hasCurrentPhotoTarget
+        ? "Take photo for current stratum" + (currentStratumLabel ? " S" + currentStratumLabel : "")
+        : "No current stratum available";
+    const stratumPhotoCount = currentStratumCard ? getCardPhotoEntries(currentStratumCard).length : 0;
+    const hasReferencePhoto = Boolean(state.referencePhoto && state.referencePhoto.length > 0);
+
+    if (elements.activeStpPhotoButton) {
+        elements.activeStpPhotoButton.disabled = !hasCurrentPhotoTarget;
+        const barLabelText = currentStratumLabel ? "Stratum S" + currentStratumLabel : "Stratum Photo";
+        setButtonLabelWithChip(elements.activeStpPhotoButton, barLabelText, stratumPhotoCount > 0 ? stratumPhotoCount + "" : "");
+        elements.activeStpPhotoButton.title = currentStratumTitle;
+    }
+
+    if (elements.quickStratumPhotoButton) {
+        elements.quickStratumPhotoButton.disabled = !hasCurrentPhotoTarget;
+        elements.quickStratumPhotoButton.title = currentStratumTitle;
+        setButtonChip(elements.quickStratumPhotoButton, stratumPhotoCount > 0 ? stratumPhotoCount + "" : "");
+    }
+
+    if (elements.activeReferencePhotoButton) {
+        elements.activeReferencePhotoButton.disabled = !hasReferencePhotoTarget;
+        elements.activeReferencePhotoButton.title = hasReferencePhotoTarget
+            ? "Choose reference photo"
+            : "Reference photo control unavailable";
+        setButtonChip(elements.activeReferencePhotoButton, hasReferencePhoto ? "\u2713" : "");
+    }
+
+    if (elements.quickReferencePhotoButton) {
+        elements.quickReferencePhotoButton.disabled = !hasReferencePhotoTarget;
+        elements.quickReferencePhotoButton.title = hasReferencePhotoTarget
+            ? "Choose reference photo"
+            : "Reference photo control unavailable";
+        setButtonChip(elements.quickReferencePhotoButton, hasReferencePhoto ? "\u2713" : "");
+    }
+}
+
+function setButtonLabelWithChip(button, labelText, chipText) {
+    const chip = button.querySelector(".photo-chip");
+    if (chip) {
+        const textNode = button.childNodes[0];
+        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+            textNode.textContent = labelText + " ";
+        } else {
+            button.insertBefore(document.createTextNode(labelText + " "), chip);
+        }
+        chip.textContent = chipText;
+        chip.hidden = !chipText;
+    } else {
+        button.textContent = labelText;
+    }
+}
+
+function setButtonChip(button, chipText) {
+    const chip = button.querySelector(".photo-chip");
+    if (chip) {
+        chip.textContent = chipText;
+        chip.hidden = !chipText;
+    }
+}
+
+function updateActiveStpBar() {
+    if (!elements.activeStpLblEl) {
+        return;
+    }
+
+    const siteName = state.siteName || "";
+    const rawLabel = elements.stpLabel ? elements.stpLabel.value.trim() : "";
+    const label = rawLabel || "New STP";
+    const stratumCount = elements.strataList
+        ? elements.strataList.querySelectorAll(".stratum-card").length
+        : 0;
+
+    if (elements.activeStpSiteNameEl) {
+        elements.activeStpSiteNameEl.textContent = siteName;
+        elements.activeStpSiteNameEl.hidden = !siteName;
+    }
+
+    if (elements.activeStpSepEl) {
+        elements.activeStpSepEl.hidden = !siteName;
+    }
+
+    elements.activeStpLblEl.textContent = "STP " + label;
+
+    if (elements.activeStpStratumCountEl) {
+        elements.activeStpStratumCountEl.textContent = stratumCount > 0
+            ? "\u00b7 " + stratumCount + (stratumCount === 1 ? " stratum" : " strata")
+            : "";
+    }
+
+    if (elements.activeStpSaveIndicator) {
+        const saveOk = dataSafetyState.lastFullSessionSaveOk && dataSafetyState.lastCoreBackupSaveOk;
+        elements.activeStpSaveIndicator.classList.toggle("is-warning", !saveOk);
+        elements.activeStpSaveIndicator.title = saveOk
+            ? "Session saved"
+            : "Save issue \u2014 check storage status";
+    }
+
+    updateQuickPhotoControls();
+}
+
 function updateDataSafetyStatus() {
     if (!elements.dataSafetyStatus) {
         return;
@@ -1582,6 +1794,7 @@ function saveSession() {
 
     updateImageStorageStatus();
     updateDataSafetyStatus();
+    updateActiveStpBar();
     return fullSaveOk;
 }
 
@@ -1599,6 +1812,159 @@ function updateSiteDraft() {
     applyDepthUnitUi();
     refreshPhotoRulesAll();
     saveSession();
+    updateActiveStpBar();
+}
+
+function getSavedStpDisplayLabel(stp) {
+    const baseLabel = normalizeTextValue(stp && stp.stpLabel);
+    const entryType = normalizeEntryTypeValue(stp && stp.entryType);
+    const supDirection = normalizeSupDirectionValue(stp && stp.supDirection);
+
+    if (entryType === "supplemental" && baseLabel && supDirection) {
+        return baseLabel + supDirection;
+    }
+
+    return baseLabel || "Recent STP";
+}
+
+function getStratumNumberValue(value) {
+    const parsed = Number(normalizeTextValue(value));
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function getLastSavedStpSuggestionEntries(card) {
+    const lastStp = state.stps.length > 0 ? state.stps[state.stps.length - 1] : null;
+
+    if (!lastStp || !Array.isArray(lastStp.strata) || lastStp.strata.length === 0 || !card) {
+        return [];
+    }
+
+    const stratumField = card.querySelector('[data-field="stratumLabel"]');
+    const currentStratumNumber = getStratumNumberValue(stratumField && stratumField.value) || 1;
+    const strataByNumber = new Map();
+
+    lastStp.strata.forEach(function (stratum) {
+        const stratumNumber = getStratumNumberValue(stratum && stratum.stratumLabel);
+
+        if (stratumNumber != null && !strataByNumber.has(stratumNumber)) {
+            strataByNumber.set(stratumNumber, stratum);
+        }
+    });
+
+    return [-1, 0, 1].map(function (offset) {
+        const targetNumber = currentStratumNumber + offset;
+
+        if (targetNumber < 1) {
+            return null;
+        }
+
+        const matchedStratum = strataByNumber.get(targetNumber);
+
+        if (!matchedStratum) {
+            return null;
+        }
+
+        return {
+            offset: offset,
+            targetNumber: targetNumber,
+            stratum: matchedStratum,
+            lastStp: lastStp
+        };
+    }).filter(Boolean);
+}
+
+function renderStratumSuggestions(card) {
+    if (!card) {
+        return;
+    }
+
+    const suggestionPanel = card.querySelector("[data-last-stp-suggestions]");
+    const suggestionCopy = card.querySelector("[data-last-stp-suggestions-copy]");
+    const suggestionList = card.querySelector("[data-last-stp-suggestion-list]");
+
+    if (!suggestionPanel || !suggestionCopy || !suggestionList) {
+        return;
+    }
+
+    const suggestions = getLastSavedStpSuggestionEntries(card);
+
+    suggestionList.innerHTML = "";
+
+    if (suggestions.length === 0) {
+        suggestionCopy.textContent = "";
+        suggestionPanel.hidden = true;
+        return;
+    }
+
+    suggestionCopy.textContent = "Guide from last STP "
+        + getSavedStpDisplayLabel(suggestions[0].lastStp)
+        + ". Use the matching layer or one adjacent.";
+
+    suggestions.forEach(function (entry) {
+        const button = document.createElement("button");
+        const summaryParts = [
+            normalizeTextValue(entry.stratum.depth),
+            normalizeTextValue(entry.stratum.munsell),
+            normalizeTextValue(entry.stratum.soilType),
+            normalizeTextValue(entry.stratum.horizon)
+        ].filter(Boolean);
+        const positionLabel = entry.offset === 0
+            ? "Match"
+            : (entry.offset < 0 ? "Above" : "Below");
+
+        button.type = "button";
+        button.className = "stratum-suggestion-button" + (entry.offset === 0 ? " is-match" : "");
+        button.setAttribute("data-apply-last-stp-suggestion", String(entry.targetNumber));
+        button.textContent = positionLabel + " · Stratum " + entry.targetNumber
+            + (summaryParts.length > 0 ? " · " + summaryParts.join(" · ") : "");
+        suggestionList.appendChild(button);
+    });
+
+    suggestionPanel.hidden = false;
+}
+
+function refreshStratumSuggestionsAll() {
+    if (!elements.strataList) {
+        return;
+    }
+
+    elements.strataList.querySelectorAll(".stratum-card").forEach(function (card) {
+        renderStratumSuggestions(card);
+    });
+}
+
+function applyLastStpSuggestion(card, suggestionNumber) {
+    if (!card) {
+        return;
+    }
+
+    const targetNumber = Number(suggestionNumber);
+
+    if (!Number.isFinite(targetNumber)) {
+        return;
+    }
+
+    const matchedEntry = getLastSavedStpSuggestionEntries(card).find(function (entry) {
+        return entry.targetNumber === targetNumber;
+    });
+
+    if (!matchedEntry) {
+        return;
+    }
+
+    ["depth", "munsell", "soilType", "horizon"].forEach(function (fieldName) {
+        const field = card.querySelector('[data-field="' + fieldName + '"]');
+
+        if (field) {
+            field.value = normalizeTextValue(matchedEntry.stratum[fieldName]);
+        }
+    });
+
+    const depthField = card.querySelector('[data-field="depth"]');
+
+    if (depthField) {
+        setDepthFieldValidity(depthField);
+    }
 }
 
 function addStratumCard(defaults) {
@@ -1623,6 +1989,7 @@ function addStratumCard(defaults) {
     });
 
     if (defaults && Array.isArray(defaults.photos)) {
+    refreshStratumSuggestionsAll();
         setCardPhotoEntries(newCard, defaults.photos);
     } else if (defaults && Array.isArray(defaults.photoNames)) {
         setCardPhotoNames(newCard, defaults.photoNames);
@@ -1633,6 +2000,7 @@ function addStratumCard(defaults) {
     renumberStrata();
     applyDepthUnitUi();
     updatePhotoRuleForCard(newCard);
+    updateActiveStpBar();
 }
 
 function renumberStrata() {
@@ -1661,27 +2029,7 @@ function handleStrataListClick(event) {
     if (cameraButton) {
         const card = cameraButton.closest(".stratum-card");
 
-        if (!card) {
-            return;
-        }
-
-        const cameraInput = card.querySelector('[data-field="cameraPhoto"]');
-
-        if (!cameraInput) {
-            return;
-        }
-
-        cameraInput.value = "";
-
-        try {
-            if (typeof cameraInput.showPicker === "function") {
-                cameraInput.showPicker();
-            } else {
-                cameraInput.click();
-            }
-        } catch (error) {
-            cameraInput.click();
-        }
+        openStratumPhotoPicker(card, false);
 
         return;
     }
@@ -1731,6 +2079,19 @@ function handleStrataListClick(event) {
         return;
     }
 
+    const suggestionButton = event.target.closest("[data-apply-last-stp-suggestion]");
+
+    if (suggestionButton) {
+        const card = suggestionButton.closest(".stratum-card");
+
+        if (!card) {
+            return;
+        }
+
+        applyLastStpSuggestion(card, suggestionButton.getAttribute("data-apply-last-stp-suggestion"));
+        return;
+    }
+
     const removeButton = event.target.closest("[data-remove-stratum]");
 
     if (!removeButton) {
@@ -1750,8 +2111,13 @@ function handleStrataListClick(event) {
 
     releaseCardDraftPhotos(card);
 
+    if (lastTouchedStratumCard === card) {
+        lastTouchedStratumCard = null;
+    }
+
     card.remove();
     renumberStrata();
+    updateActiveStpBar();
 }
 
 function handleStrataListInput(event) {
@@ -1796,6 +2162,7 @@ function handleStrataListInput(event) {
     if (fieldName === "stratumLabel") {
         const card = field.closest(".stratum-card");
         updatePhotoRuleForCard(card);
+        renderStratumSuggestions(card);
         return;
     }
 
@@ -2693,6 +3060,7 @@ function renderPhotoListForCard(card) {
     }
 
     warningElement.textContent = card.dataset.photoWarning || "";
+    updateQuickPhotoControls();
 }
 
 function findFirstInvalidPhotoCard() {
@@ -2849,6 +3217,7 @@ function handleUseCurrentGps() {
 
 function resetCurrentStp(shouldFocus) {
     releaseCurrentDraftPhotos();
+    lastTouchedStratumCard = null;
     elements.strataList.innerHTML = "";
     addStratumCard();
 
@@ -2872,6 +3241,7 @@ function resetCurrentStp(shouldFocus) {
     if (shouldFocus) {
         elements.stpLabel.focus();
     }
+    updateActiveStpBar();
 }
 
 async function saveCurrentStp() {
@@ -3065,6 +3435,7 @@ function renderSavedStps() {
     const hasActiveFilters = Boolean(searchTerm) || typeFilter !== "all" || sortValue !== "newest";
     updateHeaderCount(elements.savedStpHeaderCount, state.stps.length, state.stps.length);
     updateGpsMapButtonState();
+    updateWrapUpSummary();
 
     if (state.stps.length === 0) {
         updateSavedStpFilterSummary(0, 0, searchTerm, typeFilter, sortValue);
@@ -4810,6 +5181,7 @@ function renderReferencePhoto() {
     }
 
     updateImageStorageStatus();
+    updateQuickPhotoControls();
 }
 
 function clearReferencePhoto(showMessage) {
@@ -5018,7 +5390,18 @@ function getSavedGpsPointsForMap() {
             longitude: longitude,
             savedAt: normalizeTextValue(stp.savedAt),
             siteName: normalizeTextValue(stp.siteName || state.siteName),
-            siteLocation: normalizeTextValue(stp.siteLocation || state.siteLocation)
+            siteLocation: normalizeTextValue(stp.siteLocation || state.siteLocation),
+            strata: Array.isArray(stp.strata) ? stp.strata.map(function (s) {
+                return {
+                    stratumLabel: normalizeTextValue(s.stratumLabel),
+                    depth: normalizeTextValue(s.depth),
+                    munsell: normalizeTextValue(s.munsell),
+                    soilType: normalizeTextValue(s.soilType),
+                    horizon: normalizeTextValue(s.horizon),
+                    artifactSummary: normalizeTextValue(s.artifactSummary),
+                    notes: normalizeTextValue(s.notes)
+                };
+            }) : []
         });
     });
 
@@ -5035,6 +5418,30 @@ function updateGpsMapButtonState() {
     elements.viewGpsMapButton.title = pointCount === 0
         ? "Save at least one STP with valid GPS coordinates to open the map."
         : "Open map with " + pointCount + (pointCount === 1 ? " plotted GPS point." : " plotted GPS points.");
+}
+
+function updateWrapUpSummary() {
+    if (!elements.wrapUpPanel) {
+        return;
+    }
+
+    const stpCount = state.stps.length;
+    elements.wrapUpPanel.hidden = stpCount === 0;
+
+    if (stpCount === 0) {
+        return;
+    }
+
+    const stratumCount = state.stps.reduce(function (sum, stp) {
+        return sum + (Array.isArray(stp.strata) ? stp.strata.length : 0);
+    }, 0);
+
+    const sitePart = state.siteName ? state.siteName + (state.siteLocation ? " \u2014 " + state.siteLocation : "") : "";
+    const countPart = stpCount + (stpCount === 1 ? " STP" : " STPs") + ", " + stratumCount + (stratumCount === 1 ? " stratum" : " strata") + " recorded.";
+
+    if (elements.wrapUpSummaryText) {
+        elements.wrapUpSummaryText.textContent = (sitePart ? sitePart + ". " : "") + countPart;
+    }
 }
 
 function openGpsPointsMap() {

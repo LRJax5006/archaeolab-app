@@ -189,9 +189,68 @@
             color: #8b1f1f;
         }
 
+        .stp-detail-section {
+            border-top: 1px solid rgba(31, 43, 38, 0.2);
+            padding-top: 10px;
+        }
+
+        .stp-detail-panel {
+            display: grid;
+            gap: 8px;
+        }
+
+        .stp-detail-head {
+            margin: 0 0 4px;
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: #1f2b26;
+        }
+
+        .stp-stratum-row {
+            background: rgba(255, 255, 255, 0.72);
+            border: 1px solid rgba(31, 43, 38, 0.18);
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 16px;
+        }
+
+        .stp-stratum-field {
+            display: flex;
+            flex-direction: column;
+            min-width: 80px;
+        }
+
+        .stp-stratum-label {
+            font-size: 0.68rem;
+            font-weight: 700;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+            color: #4a5550;
+        }
+
+        .stp-stratum-value {
+            font-size: 0.9rem;
+            color: #1f2b26;
+        }
+
+        .stp-stratum-notes {
+            grid-column: 1 / -1;
+            font-size: 0.85rem;
+            color: #3a4a45;
+            font-style: italic;
+        }
+
+        .stp-detail-empty {
+            color: #4a5550;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
         @media (max-width: 720px) {
             .layout {
-                grid-template-rows: minmax(260px, 56vh) auto auto auto;
+                grid-template-rows: minmax(260px, 56vh) auto auto auto auto;
             }
         }
     </style>
@@ -228,6 +287,11 @@
         <section>
             <h2 class="list-title">Plotted Points</h2>
             <ol id="gpsPointList" class="point-list"></ol>
+        </section>
+
+        <section id="stpDetailSection" class="stp-detail-section" hidden>
+            <h2 class="list-title">STP Details</h2>
+            <div id="stpDetailPanel" class="stp-detail-panel"></div>
         </section>
     </main>
 
