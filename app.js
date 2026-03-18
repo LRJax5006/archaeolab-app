@@ -2,6 +2,7 @@ const storageKey = "archaeolab-stp-session-v1";
 const projectsStorageKey = "archaeolab-projects-v1";
 const filterStorageKey = "archaeolab-ui-filters-v1";
 const contrastModeStorageKey = "archaeolab-contrast-mode-v1";
+const flowModeStorageKey = "archaeolab-flow-mode-v1";
 const importQualityModeStorageKey = "archaeolab-import-quality-mode-v1";
 const coreDataBackupStorageKey = "archaeolab-stp-core-backup-v1";
 const projectsCoreBackupStorageKey = "archaeolab-project-latest-core-backup-v1";
@@ -72,6 +73,9 @@ let referencePhotoPreviewEntryKey = "";
 let designatedJsonBackupFileName = "";
 let designatedJsonBackupLastSavedAt = "";
 let backupDestinationStatusRequestId = 0;
+let flowModeEnabled = true;
+let flowSteps = [];
+let activeFlowStepId = "";
 let lastTouchedStratumCard = null;
 let activeEditStpIndex = -1;
 let sessionSavePendingCount = 0;
@@ -361,6 +365,7 @@ async function initializeApp() {
     registerServiceWorker();
     setupPwaInstallPrompt();
     updateActiveStpBar();
+    initializeFlowNavigator();
     await updateBackupDestinationStatus();
 }
 
@@ -525,6 +530,12 @@ function cacheElements() {
     elements.wrapUpXlsxButton = document.getElementById("wrapUpXlsxButton");
     elements.wrapUpCsvButton = document.getElementById("wrapUpCsvButton");
     elements.wrapUpJsonButton = document.getElementById("wrapUpJsonButton");
+    elements.flowNavigator = document.getElementById("flowNavigator");
+    elements.flowStepSelect = document.getElementById("flowStepSelect");
+    elements.flowPrevButton = document.getElementById("flowPrevButton");
+    elements.flowNextButton = document.getElementById("flowNextButton");
+    elements.flowToggleButton = document.getElementById("flowToggleButton");
+    elements.flowStepStatus = document.getElementById("flowStepStatus");
 }
 
 function bindEvents() {
@@ -572,6 +583,22 @@ function bindEvents() {
     }
     if (elements.wrapUpJsonButton) {
         elements.wrapUpJsonButton.addEventListener("click", downloadSessionData);
+    }
+
+    if (elements.flowStepSelect) {
+        elements.flowStepSelect.addEventListener("change", handleFlowStepSelectionChange);
+    }
+
+    if (elements.flowPrevButton) {
+        elements.flowPrevButton.addEventListener("click", handleFlowStepPrevious);
+    }
+
+    if (elements.flowNextButton) {
+        elements.flowNextButton.addEventListener("click", handleFlowStepNext);
+    }
+
+    if (elements.flowToggleButton) {
+        elements.flowToggleButton.addEventListener("click", handleFlowToggle);
     }
 
     if (elements.highContrastToggle) {
@@ -647,6 +674,9 @@ function bindEvents() {
 
     if (elements.jumpToFormButton) {
         elements.jumpToFormButton.addEventListener("click", function () {
+            if (flowSteps.length > 0) {
+                setActiveFlowStep("site", false);
+            }
             elements.entryForm.scrollIntoView({ behavior: "smooth", block: "start" });
             elements.stpLabel.focus();
         });
@@ -1148,6 +1178,261 @@ function applyImportQualityMode(mode, shouldPersist) {
     } catch (error) {
         console.warn("Could not save import quality preference.", error);
     }
+}
+
+function collectFlowSteps() {
+    const steps = [];
+    const seenStepIds = new Set();
+
+    Array.from(document.querySelectorAll("[data-flow-step]")).forEach(function (element) {
+        const stepId = normalizeSearchToken(element.getAttribute("data-flow-step"));
+
+        if (!stepId || seenStepIds.has(stepId)) {
+            return;
+        }
+
+        const explicitLabel = normalizeTextValue(element.getAttribute("data-flow-label"));
+        const heading = element.querySelector("h2, h3");
+        const headingLabel = normalizeTextValue(heading && heading.textContent);
+
+        seenStepIds.add(stepId);
+        steps.push({
+            id: stepId,
+            label: explicitLabel || headingLabel || stepId
+        });
+    });
+
+    return steps;
+}
+
+function getFlowStepElementsById(stepId) {
+    if (!stepId) {
+        return [];
+    }
+
+    return Array.from(document.querySelectorAll('[data-flow-step="' + stepId + '"]'));
+}
+
+function getAvailableFlowSteps() {
+    return flowSteps.filter(function (step) {
+        return getFlowStepElementsById(step.id).some(function (element) {
+            return !element.hidden;
+        });
+    });
+}
+
+function getFlowStepLabel(stepId) {
+    const matchingStep = flowSteps.find(function (step) {
+        return step.id === stepId;
+    });
+
+    return matchingStep ? matchingStep.label : stepId;
+}
+
+function updateFlowToggleButton() {
+    if (!elements.flowToggleButton) {
+        return;
+    }
+
+    const buttonLabel = flowModeEnabled ? "Flow View: On" : "Flow View: Off";
+    elements.flowToggleButton.textContent = buttonLabel;
+    elements.flowToggleButton.setAttribute("aria-pressed", flowModeEnabled ? "true" : "false");
+    elements.flowToggleButton.setAttribute("aria-label", buttonLabel);
+}
+
+function applyFlowStepVisibility() {
+    Array.from(document.querySelectorAll("[data-flow-step]")).forEach(function (element) {
+        const stepId = normalizeSearchToken(element.getAttribute("data-flow-step"));
+        const shouldHide = flowModeEnabled && Boolean(activeFlowStepId) && stepId !== activeFlowStepId;
+
+        element.classList.toggle("flow-step-hidden", shouldHide);
+    });
+}
+
+function focusFlowStepElement() {
+    if (!activeFlowStepId) {
+        return;
+    }
+
+    const targetElement = getFlowStepElementsById(activeFlowStepId).find(function (element) {
+        return !element.hidden;
+    });
+
+    if (!targetElement) {
+        return;
+    }
+
+    targetElement.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function syncFlowNavigatorState(shouldScrollToActiveStep) {
+    if (!elements.flowStepSelect || !elements.flowStepStatus) {
+        return;
+    }
+
+    if (flowSteps.length === 0) {
+        flowSteps = collectFlowSteps();
+    }
+
+    const availableSteps = getAvailableFlowSteps();
+
+    if (availableSteps.length === 0) {
+        elements.flowStepSelect.innerHTML = "";
+        elements.flowStepSelect.disabled = true;
+        if (elements.flowPrevButton) {
+            elements.flowPrevButton.disabled = true;
+        }
+        if (elements.flowNextButton) {
+            elements.flowNextButton.disabled = true;
+        }
+        elements.flowStepStatus.textContent = "No workflow sections are available.";
+        applyFlowStepVisibility();
+        updateFlowToggleButton();
+        return;
+    }
+
+    if (!availableSteps.some(function (step) {
+        return step.id === activeFlowStepId;
+    })) {
+        activeFlowStepId = availableSteps[0].id;
+    }
+
+    elements.flowStepSelect.innerHTML = "";
+    availableSteps.forEach(function (step) {
+        const option = document.createElement("option");
+        option.value = step.id;
+        option.textContent = step.label;
+        elements.flowStepSelect.appendChild(option);
+    });
+
+    elements.flowStepSelect.value = activeFlowStepId;
+    elements.flowStepSelect.disabled = availableSteps.length <= 1;
+
+    const currentIndex = availableSteps.findIndex(function (step) {
+        return step.id === activeFlowStepId;
+    });
+
+    if (elements.flowPrevButton) {
+        elements.flowPrevButton.disabled = currentIndex <= 0;
+    }
+
+    if (elements.flowNextButton) {
+        elements.flowNextButton.disabled = currentIndex >= availableSteps.length - 1;
+    }
+
+    const modeText = flowModeEnabled ? "Flow pages on." : "Flow pages off.";
+    elements.flowStepStatus.textContent = "Step "
+        + String(currentIndex + 1)
+        + " of "
+        + String(availableSteps.length)
+        + ": "
+        + getFlowStepLabel(activeFlowStepId)
+        + ". "
+        + modeText;
+
+    applyFlowStepVisibility();
+    updateFlowToggleButton();
+
+    if (shouldScrollToActiveStep) {
+        focusFlowStepElement();
+    }
+}
+
+function setActiveFlowStep(stepId, shouldScroll) {
+    const normalizedStepId = normalizeSearchToken(stepId);
+
+    if (!normalizedStepId) {
+        return;
+    }
+
+    activeFlowStepId = normalizedStepId;
+    syncFlowNavigatorState(Boolean(shouldScroll));
+}
+
+function applyFlowMode(enabled, shouldPersist, shouldScrollToActiveStep) {
+    flowModeEnabled = Boolean(enabled);
+
+    if (shouldPersist) {
+        try {
+            localStorage.setItem(flowModeStorageKey, flowModeEnabled ? "on" : "off");
+        } catch (error) {
+            console.warn("Could not save flow mode preference.", error);
+        }
+    }
+
+    syncFlowNavigatorState(Boolean(shouldScrollToActiveStep));
+}
+
+function initializeFlowNavigator() {
+    if (!elements.flowStepSelect || !elements.flowStepStatus) {
+        return;
+    }
+
+    flowSteps = collectFlowSteps();
+
+    if (flowSteps.length === 0) {
+        return;
+    }
+
+    let storedFlowMode = "on";
+
+    try {
+        storedFlowMode = normalizeSearchToken(localStorage.getItem(flowModeStorageKey) || "on");
+    } catch (error) {
+        console.warn("Could not load flow mode preference.", error);
+    }
+
+    flowModeEnabled = storedFlowMode !== "off";
+    activeFlowStepId = flowSteps[0].id;
+    syncFlowNavigatorState(false);
+}
+
+function handleFlowStepSelectionChange() {
+    if (!elements.flowStepSelect) {
+        return;
+    }
+
+    setActiveFlowStep(elements.flowStepSelect.value, true);
+}
+
+function handleFlowStepPrevious() {
+    const availableSteps = getAvailableFlowSteps();
+
+    if (availableSteps.length === 0) {
+        return;
+    }
+
+    const currentIndex = availableSteps.findIndex(function (step) {
+        return step.id === activeFlowStepId;
+    });
+
+    if (currentIndex <= 0) {
+        return;
+    }
+
+    setActiveFlowStep(availableSteps[currentIndex - 1].id, true);
+}
+
+function handleFlowStepNext() {
+    const availableSteps = getAvailableFlowSteps();
+
+    if (availableSteps.length === 0) {
+        return;
+    }
+
+    const currentIndex = availableSteps.findIndex(function (step) {
+        return step.id === activeFlowStepId;
+    });
+
+    if (currentIndex < 0 || currentIndex >= availableSteps.length - 1) {
+        return;
+    }
+
+    setActiveFlowStep(availableSteps[currentIndex + 1].id, true);
+}
+
+function handleFlowToggle() {
+    applyFlowMode(!flowModeEnabled, true, false);
 }
 
 function updateProjectFilterSummary(totalCount, matchedCount, searchTerm, sortValue) {
@@ -3751,6 +4036,7 @@ function reopenSavedStp(stpIndex) {
     refreshPhotoRulesAll();
     refreshStratumSuggestionsAll();
     setActiveEditStpIndex(normalizedIndex);
+    setActiveFlowStep("site", false);
 
     elements.entryForm.scrollIntoView({ behavior: "smooth", block: "start" });
     elements.stpLabel.focus();
@@ -3964,6 +4250,7 @@ function renderSavedStps() {
     updateHeaderCount(elements.savedStpHeaderCount, state.stps.length, state.stps.length);
     updateGpsMapButtonState();
     updateWrapUpSummary();
+    syncFlowNavigatorState(false);
 
     if (state.stps.length === 0) {
         updateSavedStpFilterSummary(0, 0, searchTerm, typeFilter, sortValue);

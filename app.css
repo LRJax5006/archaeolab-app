@@ -121,6 +121,78 @@ h1 {
     gap: 18px;
 }
 
+.flow-navigator {
+    margin-bottom: 18px;
+    padding: 14px 16px;
+}
+
+.flow-navigator-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.flow-navigator-title {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--gold-dark);
+}
+
+.flow-nav-toggle {
+    white-space: nowrap;
+}
+
+.flow-navigator-controls {
+    margin-top: 10px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: end;
+}
+
+.flow-nav-select-field {
+    display: grid;
+    gap: 6px;
+}
+
+.flow-nav-select-field span {
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink);
+}
+
+.flow-nav-select-field select {
+    width: 100%;
+    border: 2px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font: inherit;
+    color: var(--ink);
+    background: #ffffff;
+}
+
+.flow-nav-select-field select:focus {
+    outline: 3px solid rgba(218, 108, 22, 0.5);
+    outline-offset: 1px;
+    border-color: var(--orange-dark);
+}
+
+.flow-step-status {
+    margin: 10px 0 0;
+    color: var(--ink-soft);
+    font-size: 0.88rem;
+}
+
+.flow-step-hidden {
+    display: none !important;
+}
+
 .entry-layout {
     display: grid;
     grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
@@ -1943,6 +2015,14 @@ body.dark-contrast .map-viewer-img {
 
     .entry-photo-panel {
         grid-template-rows: minmax(220px, 1fr) auto;
+    }
+
+    .flow-navigator-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .flow-nav-toggle {
+        width: auto;
     }
 
     .entry-photo-library-item {

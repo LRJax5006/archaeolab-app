@@ -88,8 +88,24 @@
             </div>
         </header>
 
+        <div id="flowNavigator" class="panel flow-navigator" aria-label="Workflow navigation">
+            <div class="flow-navigator-head">
+                <p class="flow-navigator-title">Workflow Navigator</p>
+                <button type="button" id="flowToggleButton" class="ghost-button flow-nav-toggle" aria-pressed="true">Flow View: On</button>
+            </div>
+            <div class="flow-navigator-controls">
+                <button type="button" id="flowPrevButton" class="ghost-button">&#8592; Previous</button>
+                <label class="flow-nav-select-field" for="flowStepSelect">
+                    <span>Go To Section</span>
+                    <select id="flowStepSelect" aria-label="Choose workflow section"></select>
+                </label>
+                <button type="button" id="flowNextButton" class="secondary-button">Next &#8594;</button>
+            </div>
+            <p id="flowStepStatus" class="flow-step-status" aria-live="polite"></p>
+        </div>
+
         <main class="workspace">
-            <section class="panel tester-guide-panel">
+            <section class="panel tester-guide-panel" data-flow-step="guide" data-flow-label="Tester Guide">
                 <div class="section-head">
                     <div>
                         <h2>Tester Quick Guide</h2>
@@ -110,7 +126,7 @@
                 </p>
             </section>
 
-            <section class="panel">
+            <section class="panel" data-flow-step="projects" data-flow-label="Project Library">
                 <div class="section-head">
                     <div>
                         <h2>Project Library <span id="projectsHeaderCount" class="section-count" aria-live="polite"></span></h2>
@@ -144,7 +160,7 @@
 
             <form id="entryForm">
                 <div class="entry-layout">
-                    <section class="panel">
+                    <section class="panel" data-flow-step="site" data-flow-label="Site Details">
                         <div class="section-head">
                             <div>
                                 <h2>Site Details</h2>
@@ -242,7 +258,7 @@
                         </p>
                     </section>
 
-                    <aside class="panel entry-photo-panel" aria-label="Field reference photo">
+                    <aside class="panel entry-photo-panel" aria-label="Field reference photo" data-flow-step="site" data-flow-label="Site Details">
                         <div class="entry-photo-media">
                             <img id="referencePhotoImg" class="entry-photo-img" src="IMG_3376.JPG" alt="Reference photo beside the STP data entry area" loading="lazy">
                             <div id="referencePhotoEmpty" class="entry-photo-empty" hidden>
@@ -270,7 +286,7 @@
                     </aside>
                 </div>
 
-                <section class="panel">
+                <section class="panel" data-flow-step="strata" data-flow-label="Strata">
                     <div class="section-head">
                         <div>
                             <h2>Strata</h2>
@@ -283,13 +299,13 @@
                     <div id="strataList" class="strata-list"></div>
                 </section>
 
-                <div class="form-actions">
+                <div class="form-actions" data-flow-step="strata" data-flow-label="Strata">
                     <button type="button" id="resetCurrentButton" class="ghost-button">Reset Current STP</button>
                     <button type="button" id="saveStpButton" class="primary-button">Save STP</button>
                 </div>
             </form>
 
-            <section class="panel saved-panel">
+            <section class="panel saved-panel" data-flow-step="saved" data-flow-label="Saved STPs">
                 <div class="section-head">
                     <div>
                         <h2>Saved STPs <span id="savedStpHeaderCount" class="section-count" aria-live="polite"></span></h2>
@@ -346,7 +362,7 @@
                 <div id="savedStpList" class="saved-stp-list"></div>
             </section>
 
-            <section class="panel wrap-up-panel" id="wrapUpPanel" hidden>
+            <section class="panel wrap-up-panel" id="wrapUpPanel" hidden data-flow-step="wrap" data-flow-label="Wrap Up">
                 <div class="section-head">
                     <div>
                         <h2>Wrap Up Session</h2>
