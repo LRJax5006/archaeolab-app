@@ -22,6 +22,9 @@
         </div>
         <div class="active-stp-bar-right">
             <span id="activeStpSaveIndicator" class="active-stp-dot" title="Session saved"></span>
+            <span id="activeStpSaveText" class="active-stp-save-text" aria-live="polite">Saved</span>
+            <button type="button" id="topSaveStpButton" class="active-stp-btn">Save STP</button>
+            <button type="button" id="topNewStpButton" class="active-stp-btn">New STP</button>
             <button type="button" id="activeStpPhotoButton" class="active-stp-btn" title="Take photo for current stratum">Stratum Photo <span class="photo-chip" hidden></span></button>
             <button type="button" id="activeReferencePhotoButton" class="active-stp-btn" title="Choose reference photo">Reference Photo <span class="photo-chip" hidden></span></button>
             <button type="button" id="jumpToFormButton" class="active-stp-btn">&#8595; Entry Form</button>
@@ -419,7 +422,7 @@
 
                 <div class="field field-notes">
                     <span>Photo Names (editable)</span>
-                    <p class="photo-help">Photos are auto-named from the rule. Edit names below or remove any incorrect entry. Saved STPs keep photo labels only; photo files remain in your phone storage. Use Open to select and preview a matching photo from your device.</p>
+                    <p class="photo-help">Photos are auto-named from the rule. Edit names below or remove any incorrect entry. Use Open to preview the stored STP photo; if storage is missing, you can choose a matching file from your device.</p>
                     <ul class="photo-list" data-photo-list></ul>
                     <p class="photo-warning" data-photo-warning></p>
                 </div>
@@ -446,7 +449,7 @@
         </div>
     </div>
 
-    <input type="file" id="savedPhotoOpenInput" accept="image/*" hidden>
+    <input type="file" id="savedPhotoOpenInput" accept="image/*" class="camera-photo-input" aria-hidden="true" tabindex="-1">
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>

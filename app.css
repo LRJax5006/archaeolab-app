@@ -1462,6 +1462,37 @@ body.dark-contrast .stratum-suggestion-button.is-match {
     background: #e8a000;
 }
 
+.active-stp-dot.is-saving {
+    background: #f4d07a;
+    animation: save-pulse 1s ease-in-out infinite;
+}
+
+.active-stp-save-text {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.86);
+    min-width: 58px;
+}
+
+.active-stp-save-text.is-saving {
+    color: #f4d07a;
+}
+
+.active-stp-save-text.is-warning {
+    color: #ffc36e;
+}
+
+@keyframes save-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.35;
+    }
+}
+
 .active-stp-btn {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
@@ -1526,6 +1557,18 @@ body.dark-contrast .active-stp-bar {
 
 body.dark-contrast .active-stp-lbl {
     color: #ffdf6b;
+}
+
+body.dark-contrast .active-stp-save-text {
+    color: #f0ebe3;
+}
+
+body.dark-contrast .active-stp-save-text.is-saving {
+    color: #ffdf6b;
+}
+
+body.dark-contrast .active-stp-save-text.is-warning {
+    color: #ff9142;
 }
 
 body.dark-contrast .active-stp-btn {

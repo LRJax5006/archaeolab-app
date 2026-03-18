@@ -19,7 +19,7 @@ const approximateLocalStorageQuotaBytes = 5 * 1024 * 1024;
 const defaultReferencePhotoSrc = "IMG_3376.JPG";
 const defaultMapViewerTitle = "Project Map Reference";
 const gpsCoordinateDecimalPlaces = 6;
-const persistStratumPhotoBlobsInBrowser = false;
+const persistStratumPhotoBlobsInBrowser = true;
 const autoCsvBackupOnStartNewStp = true;
 const importQualityProfiles = {
     balanced: {
@@ -62,6 +62,8 @@ let importQualityMode = "sharp";
 let pendingSavedPhotoOpenName = "";
 let activeMapViewerObjectUrl = "";
 let lastTouchedStratumCard = null;
+let activeEditStpIndex = -1;
+let sessionSavePendingCount = 0;
 let deferredInstallPrompt = null;
 let sessionSaveQueue = Promise.resolve();
 let projectsSaveQueue = Promise.resolve();
@@ -492,6 +494,9 @@ function cacheElements() {
     elements.activeStpLblEl = document.getElementById("activeStpLbl");
     elements.activeStpStratumCountEl = document.getElementById("activeStpStratumCount");
     elements.activeStpSaveIndicator = document.getElementById("activeStpSaveIndicator");
+    elements.activeStpSaveText = document.getElementById("activeStpSaveText");
+    elements.topSaveStpButton = document.getElementById("topSaveStpButton");
+    elements.topNewStpButton = document.getElementById("topNewStpButton");
     elements.activeStpPhotoButton = document.getElementById("activeStpPhotoButton");
     elements.activeReferencePhotoButton = document.getElementById("activeReferencePhotoButton");
     elements.jumpToFormButton = document.getElementById("jumpToFormButton");
@@ -511,9 +516,19 @@ function bindEvents() {
 
     elements.saveStpButton.addEventListener("click", saveCurrentStp);
     elements.resetCurrentButton.addEventListener("click", function () {
-        downloadAutoCsvForNewStp();
-        resetCurrentStp(true);
+        startNewStpFromCurrent();
     });
+
+    if (elements.topSaveStpButton) {
+        elements.topSaveStpButton.addEventListener("click", saveCurrentStp);
+    }
+
+    if (elements.topNewStpButton) {
+        elements.topNewStpButton.addEventListener("click", function () {
+            startNewStpFromCurrent();
+        });
+    }
+
     elements.exportXlsxButton.addEventListener("click", downloadExcelReadyXlsx);
     elements.exportCsvButton.addEventListener("click", downloadExcelReadyCsv);
     if (elements.viewGpsMapButton) {
@@ -586,10 +601,12 @@ function bindEvents() {
     elements.stpEntryType.addEventListener("change", function () {
         updateStpTypeUi();
         refreshPhotoRulesAll();
+        updateActiveStpBar();
     });
 
     elements.parentStp.addEventListener("change", function () {
         refreshPhotoRulesAll();
+        updateActiveStpBar();
     });
 
     elements.stpLabel.addEventListener("input", function () {
@@ -626,6 +643,7 @@ function bindEvents() {
 
     elements.supDirection.addEventListener("change", function () {
         refreshPhotoRulesAll();
+        updateActiveStpBar();
     });
 
     elements.projectSearchInput.addEventListener("input", handleProjectFilterInput);
@@ -1566,6 +1584,45 @@ function setButtonChip(button, chipText) {
     }
 }
 
+function isEditingSavedStp() {
+    return Number.isInteger(activeEditStpIndex)
+        && activeEditStpIndex >= 0
+        && activeEditStpIndex < state.stps.length;
+}
+
+function setActiveEditStpIndex(nextIndex) {
+    if (Number.isInteger(nextIndex) && nextIndex >= 0 && nextIndex < state.stps.length) {
+        activeEditStpIndex = nextIndex;
+    } else {
+        activeEditStpIndex = -1;
+    }
+
+    updateSaveActionLabels();
+    updateActiveStpBar();
+}
+
+function updateSaveActionLabels() {
+    const saveLabel = isEditingSavedStp() ? "Update STP" : "Save STP";
+
+    if (elements.saveStpButton) {
+        elements.saveStpButton.textContent = saveLabel;
+    }
+
+    if (elements.topSaveStpButton) {
+        elements.topSaveStpButton.textContent = saveLabel;
+    }
+}
+
+function setSaveButtonsDisabled(isDisabled) {
+    if (elements.saveStpButton) {
+        elements.saveStpButton.disabled = isDisabled;
+    }
+
+    if (elements.topSaveStpButton) {
+        elements.topSaveStpButton.disabled = isDisabled;
+    }
+}
+
 function updateActiveStpBar() {
     if (!elements.activeStpLblEl) {
         return;
@@ -1595,12 +1652,23 @@ function updateActiveStpBar() {
             : "";
     }
 
+    const saveOk = dataSafetyState.lastFullSessionSaveOk && dataSafetyState.lastCoreBackupSaveOk;
+    const isSaving = sessionSavePendingCount > 0;
+
     if (elements.activeStpSaveIndicator) {
-        const saveOk = dataSafetyState.lastFullSessionSaveOk && dataSafetyState.lastCoreBackupSaveOk;
-        elements.activeStpSaveIndicator.classList.toggle("is-warning", !saveOk);
-        elements.activeStpSaveIndicator.title = saveOk
-            ? "Session saved"
-            : "Save issue \u2014 check storage status";
+        elements.activeStpSaveIndicator.classList.toggle("is-warning", !saveOk && !isSaving);
+        elements.activeStpSaveIndicator.classList.toggle("is-saving", isSaving);
+        elements.activeStpSaveIndicator.title = isSaving
+            ? "Saving session"
+            : (saveOk ? "Session saved" : "Save issue \u2014 check storage status");
+    }
+
+    if (elements.activeStpSaveText) {
+        elements.activeStpSaveText.classList.toggle("is-saving", isSaving);
+        elements.activeStpSaveText.classList.toggle("is-warning", !saveOk && !isSaving);
+        elements.activeStpSaveText.textContent = isSaving
+            ? "Saving..."
+            : (saveOk ? "Saved" : "Save issue");
     }
 
     updateQuickPhotoControls();
@@ -1666,6 +1734,8 @@ function queueSessionSaveToIndexedDb(sessionSnapshot) {
     }
 
     const normalizedSnapshot = normalizeImportedSession(sessionSnapshot);
+    sessionSavePendingCount += 1;
+    updateActiveStpBar();
 
     sessionSaveQueue = sessionSaveQueue
         .catch(function () {
@@ -1688,8 +1758,10 @@ function queueSessionSaveToIndexedDb(sessionSnapshot) {
             dataSafetyState.lastFullSessionSaveOk = false;
         })
         .finally(function () {
+            sessionSavePendingCount = Math.max(0, sessionSavePendingCount - 1);
             updateImageStorageStatus();
             updateDataSafetyStatus();
+            updateActiveStpBar();
         });
 }
 
@@ -1776,11 +1848,16 @@ function saveSession() {
         queueSessionSaveToIndexedDb(state);
         fullSaveOk = true;
     } else {
+        sessionSavePendingCount += 1;
+        updateActiveStpBar();
+
         try {
             localStorage.setItem(storageKey, JSON.stringify(normalizeImportedSession(state)));
             fullSaveOk = true;
         } catch (error) {
             console.warn("Could not save session.", error);
+        } finally {
+            sessionSavePendingCount = Math.max(0, sessionSavePendingCount - 1);
         }
     }
 
@@ -2075,7 +2152,8 @@ function handleStrataListClick(event) {
             return;
         }
 
-        requestSavedPhotoOpen(entries[openIndex].name);
+        const targetEntry = entries[openIndex];
+        requestSavedPhotoOpen(targetEntry.name, targetEntry.id);
         return;
     }
 
@@ -2251,6 +2329,19 @@ function handleStrataListChange(event) {
 }
 
 function handleSavedStpListClick(event) {
+    const reopenButton = event.target.closest("[data-reopen-stp-index]");
+
+    if (reopenButton) {
+        const stpIndex = Number(reopenButton.getAttribute("data-reopen-stp-index"));
+
+        if (!Number.isInteger(stpIndex) || stpIndex < 0 || stpIndex >= state.stps.length) {
+            return;
+        }
+
+        reopenSavedStp(stpIndex);
+        return;
+    }
+
     const openButton = event.target.closest("[data-open-photo-name]");
 
     if (!openButton) {
@@ -2258,10 +2349,11 @@ function handleSavedStpListClick(event) {
     }
 
     const photoName = openButton.getAttribute("data-open-photo-name") || "Photo";
-    requestSavedPhotoOpen(photoName);
+    const photoId = openButton.getAttribute("data-open-photo-id") || "";
+    requestSavedPhotoOpen(photoName, photoId);
 }
 
-function requestSavedPhotoOpen(photoName) {
+function requestSavedPhotoOpenFromPicker(photoName) {
     if (!elements.savedPhotoOpenInput) {
         alert("Photo opening is not available in this browser.");
         return;
@@ -2279,6 +2371,45 @@ function requestSavedPhotoOpen(photoName) {
     } catch (error) {
         elements.savedPhotoOpenInput.click();
     }
+}
+
+async function tryOpenSavedPhotoFromDatabase(photoId, photoName) {
+    const normalizedPhotoId = normalizeTextValue(photoId);
+
+    if (!normalizedPhotoId || !supportsIndexedDbPersistence()) {
+        return false;
+    }
+
+    try {
+        const blobValue = await readPhotoBlobFromDatabase(normalizedPhotoId);
+
+        if (!blobValue) {
+            return false;
+        }
+
+        const objectUrl = URL.createObjectURL(blobValue);
+        openImageInModal(objectUrl, normalizeTextValue(photoName) || "Photo", true);
+        return true;
+    } catch (error) {
+        console.warn("Could not open saved photo from IndexedDB.", error);
+        return false;
+    }
+}
+
+function requestSavedPhotoOpen(photoName, photoId) {
+    const normalizedPhotoName = normalizeTextValue(photoName) || "Photo";
+    const normalizedPhotoId = normalizeTextValue(photoId);
+
+    if (!normalizedPhotoId) {
+        requestSavedPhotoOpenFromPicker(normalizedPhotoName);
+        return;
+    }
+
+    tryOpenSavedPhotoFromDatabase(normalizedPhotoId, normalizedPhotoName).then(function (opened) {
+        if (!opened) {
+            requestSavedPhotoOpenFromPicker(normalizedPhotoName);
+        }
+    });
 }
 
 function handleSavedPhotoOpenSelection() {
@@ -2383,7 +2514,7 @@ function buildStpUniquenessKey(entryType, stpLabel, supDirection) {
     return normalizedEntryType + "|" + labelToken;
 }
 
-function isDuplicateCurrentStpLabel() {
+function isDuplicateCurrentStpLabel(ignoreIndex) {
     const currentKey = buildStpUniquenessKey(
         elements.stpEntryType.value,
         elements.stpLabel.value,
@@ -2394,7 +2525,13 @@ function isDuplicateCurrentStpLabel() {
         return false;
     }
 
-    return state.stps.some(function (stp) {
+    const normalizedIgnoreIndex = Number.isInteger(ignoreIndex) ? ignoreIndex : -1;
+
+    return state.stps.some(function (stp, index) {
+        if (index === normalizedIgnoreIndex) {
+            return false;
+        }
+
         const existingKey = buildStpUniquenessKey(stp.entryType, stp.stpLabel, stp.supDirection);
         return existingKey === currentKey;
     });
@@ -2689,6 +2826,29 @@ async function savePhotoBlobToDatabase(photoId, blobValue) {
 
         transaction.onabort = function () {
             reject(transaction.error || new Error("Photo save was aborted."));
+        };
+    });
+}
+
+async function readPhotoBlobFromDatabase(photoId) {
+    if (!photoId || !("indexedDB" in window)) {
+        return null;
+    }
+
+    const database = await getPhotoDatabase();
+
+    return new Promise(function (resolve, reject) {
+        const transaction = database.transaction(photoDatabaseStore, "readonly");
+        const store = transaction.objectStore(photoDatabaseStore);
+        const request = store.get(photoId);
+
+        request.onsuccess = function () {
+            const record = request.result;
+            resolve(record && record.blob ? record.blob : null);
+        };
+
+        request.onerror = function () {
+            reject(request.error || new Error("Could not load photo blob."));
         };
     });
 }
@@ -3218,6 +3378,7 @@ function handleUseCurrentGps() {
 function resetCurrentStp(shouldFocus) {
     releaseCurrentDraftPhotos();
     lastTouchedStratumCard = null;
+    setActiveEditStpIndex(-1);
     elements.strataList.innerHTML = "";
     addStratumCard();
 
@@ -3244,8 +3405,148 @@ function resetCurrentStp(shouldFocus) {
     updateActiveStpBar();
 }
 
+function hasCurrentDraftData() {
+    const hasHeaderData = Boolean(
+        normalizeTextValue(elements.gpsLatitude && elements.gpsLatitude.value)
+        || normalizeTextValue(elements.gpsLongitude && elements.gpsLongitude.value)
+        || normalizeTextValue(elements.parentStp && elements.parentStp.value)
+        || normalizeTextValue(elements.supDirection && elements.supDirection.value)
+        || normalizeEntryTypeValue(elements.stpEntryType && elements.stpEntryType.value) !== "base"
+    );
+
+    if (hasHeaderData) {
+        return true;
+    }
+
+    const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+
+    return cards.some(function (card) {
+        const hasFieldContent = ["depth", "munsell", "soilType", "horizon", "artifactCatalog", "artifactSummary", "notes"]
+            .some(function (fieldName) {
+                const field = card.querySelector('[data-field="' + fieldName + '"]');
+                return Boolean(normalizeTextValue(field && field.value));
+            });
+
+        return hasFieldContent || getCardPhotoEntries(card).length > 0;
+    });
+}
+
+function startNewStpFromCurrent() {
+    const isEditing = isEditingSavedStp();
+
+    if (hasCurrentDraftData()) {
+        const warning = isEditing
+            ? "You are editing a saved STP. Start a new STP and discard unsaved edits?"
+            : "Start a new STP and clear the current draft?";
+
+        if (!confirm(warning)) {
+            return;
+        }
+    }
+
+    downloadAutoCsvForNewStp();
+    resetCurrentStp(true);
+}
+
+function populateCurrentStrataFromSavedStp(stp) {
+    const sourceStrata = Array.isArray(stp && stp.strata) ? stp.strata : [];
+    const hasSourceStrata = sourceStrata.length > 0;
+
+    releaseCurrentDraftPhotos();
+    lastTouchedStratumCard = null;
+    elements.strataList.innerHTML = "";
+
+    const cardCount = hasSourceStrata ? sourceStrata.length : 1;
+
+    for (let index = 0; index < cardCount; index += 1) {
+        addStratumCard();
+    }
+
+    if (!hasSourceStrata) {
+        return;
+    }
+
+    const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+
+    cards.forEach(function (card) {
+        const stratumLabelField = card.querySelector('[data-field="stratumLabel"]');
+        const cardLabelNumber = getStratumNumberValue(stratumLabelField && stratumLabelField.value);
+        const matchedStratum = sourceStrata.find(function (stratum) {
+            return getStratumNumberValue(stratum && stratum.stratumLabel) === cardLabelNumber;
+        });
+
+        if (!matchedStratum) {
+            return;
+        }
+
+        ["depth", "munsell", "soilType", "horizon", "artifactCatalog", "artifactSummary", "notes"].forEach(function (fieldName) {
+            const field = card.querySelector('[data-field="' + fieldName + '"]');
+            if (field) {
+                field.value = normalizeTextValue(matchedStratum[fieldName]);
+            }
+        });
+
+        setCardPhotoEntries(card, getStratumPhotoEntries(matchedStratum));
+        validatePhotoNamesForCard(card);
+        renderPhotoListForCard(card);
+    });
+}
+
+function reopenSavedStp(stpIndex) {
+    const normalizedIndex = Number(stpIndex);
+
+    if (!Number.isInteger(normalizedIndex) || normalizedIndex < 0 || normalizedIndex >= state.stps.length) {
+        return;
+    }
+
+    if (hasCurrentDraftData()) {
+        const warning = isEditingSavedStp()
+            ? "Open another saved STP and discard unsaved edits in this draft?"
+            : "Open this saved STP and replace the current draft?";
+
+        if (!confirm(warning)) {
+            return;
+        }
+    }
+
+    const stp = state.stps[normalizedIndex];
+
+    state.siteName = normalizeTextValue(stp.siteName || state.siteName);
+    state.siteLocation = normalizeTextValue(stp.siteLocation || state.siteLocation);
+    state.depthUnit = normalizeDepthUnitValue(stp.depthUnit || state.depthUnit);
+
+    populateSiteFields();
+    refreshParentStpOptions();
+
+    elements.stpEntryType.value = normalizeEntryTypeValue(stp.entryType);
+    updateStpTypeUi();
+    refreshParentStpOptions();
+
+    if (elements.stpEntryType.value === "supplemental") {
+        elements.parentStp.value = normalizeTextValue(stp.parentStp);
+        elements.supDirection.value = normalizeSupDirectionValue(stp.supDirection);
+    }
+
+    elements.stpLabel.value = normalizeTextValue(stp.stpLabel);
+    elements.gpsLatitude.value = normalizeTextValue(stp.gpsLatitude);
+    elements.gpsLongitude.value = normalizeTextValue(stp.gpsLongitude);
+    setGpsStatusMessage("Re-opened saved STP for editing.", false);
+
+    refreshPhotoRulesAll();
+    populateCurrentStrataFromSavedStp(stp);
+    refreshPhotoRulesAll();
+    refreshStratumSuggestionsAll();
+    setActiveEditStpIndex(normalizedIndex);
+
+    elements.entryForm.scrollIntoView({ behavior: "smooth", block: "start" });
+    elements.stpLabel.focus();
+}
+
 async function saveCurrentStp() {
     updateSiteDraft();
+
+    const editingIndex = isEditingSavedStp() ? activeEditStpIndex : -1;
+    const isEditing = editingIndex >= 0;
 
     const depthValidation = validateAllDepthFields();
     if (!depthValidation.valid) {
@@ -3267,7 +3568,7 @@ async function saveCurrentStp() {
         return;
     }
 
-    if (isDuplicateCurrentStpLabel()) {
+    if (isDuplicateCurrentStpLabel(editingIndex)) {
         if (elements.stpEntryType.value === "supplemental") {
             alert("This supplemental STP label and Sup direction already exists. Use a different label or direction.");
         } else {
@@ -3288,18 +3589,25 @@ async function saveCurrentStp() {
         return;
     }
 
-    elements.saveStpButton.disabled = true;
+    setSaveButtonsDisabled(true);
 
     try {
         const currentStp = await collectCurrentStp();
-        state.stps.push(currentStp);
+
+        if (isEditing && editingIndex < state.stps.length) {
+            state.stps.splice(editingIndex, 1, currentStp);
+        } else {
+            state.stps.push(currentStp);
+        }
+
         const fullSessionSaved = saveSession();
         if (!fullSessionSaved) {
-            const saveWarning = getDataSafetyAlertMessage("STP saved.");
+            const saveWarning = getDataSafetyAlertMessage(isEditing ? "STP update saved." : "STP saved.");
             if (saveWarning) {
                 alert(saveWarning);
             }
         }
+
         refreshParentStpOptions();
         renderSavedStps();
         downloadAutoCsvForNewStp();
@@ -3313,11 +3621,17 @@ async function saveCurrentStp() {
         }
 
         const fallbackStp = collectCurrentStpWithoutPhotoPersistence();
-        state.stps.push(fallbackStp);
+
+        if (isEditing && editingIndex < state.stps.length) {
+            state.stps.splice(editingIndex, 1, fallbackStp);
+        } else {
+            state.stps.push(fallbackStp);
+        }
+
         const fullSessionSaved = saveSession();
 
         if (!fullSessionSaved) {
-            const saveWarning = getDataSafetyAlertMessage("STP core data saved without photos.");
+            const saveWarning = getDataSafetyAlertMessage(isEditing ? "STP update core data saved without photos." : "STP core data saved without photos.");
             if (saveWarning) {
                 alert(saveWarning);
             }
@@ -3329,7 +3643,7 @@ async function saveCurrentStp() {
         resetCurrentStp(true);
         alert("STP data saved without photos. Re-add photos later if needed.");
     } finally {
-        elements.saveStpButton.disabled = false;
+        setSaveButtonsDisabled(false);
     }
 }
 
@@ -3468,12 +3782,27 @@ function renderSavedStps() {
         const card = document.createElement("article");
         card.className = "saved-stp";
 
+        const stpIndex = state.stps.indexOf(stp);
         const titleRow = document.createElement("div");
         titleRow.className = "saved-stp-title-row";
+
         const title = document.createElement("h3");
         title.className = "saved-stp-title";
         setHighlightedText(title, "STP " + stp.stpLabel, searchTerm);
         titleRow.appendChild(title);
+
+        const titleActions = document.createElement("div");
+        titleActions.className = "saved-stp-title-actions";
+
+        const reopenButton = document.createElement("button");
+        reopenButton.type = "button";
+        reopenButton.className = "saved-stp-reopen-button";
+        reopenButton.setAttribute("data-reopen-stp-index", String(stpIndex));
+        reopenButton.textContent = stpIndex === activeEditStpIndex ? "Editing" : "Re-open";
+        reopenButton.disabled = stpIndex === activeEditStpIndex;
+        titleActions.appendChild(reopenButton);
+
+        titleRow.appendChild(titleActions);
         card.appendChild(titleRow);
 
         const stpInfo = document.createElement("div");
@@ -3549,8 +3878,8 @@ function renderSavedStps() {
 
             item.appendChild(dataGrid);
 
-            const photoNames = getStratumPhotoNames(stratum);
-            if (photoNames.length > 0) {
+            const photoEntries = getStratumPhotoEntries(stratum);
+            if (photoEntries.length > 0) {
                 const photosRow = document.createElement("div");
                 photosRow.className = "saved-stratum-photos";
                 const photosLabel = document.createElement("span");
@@ -3558,14 +3887,24 @@ function renderSavedStps() {
                 photosLabel.textContent = "Photos";
                 const photoLinks = document.createElement("div");
                 photoLinks.className = "saved-photo-links";
-                photoNames.forEach(function (photoName) {
+
+                photoEntries.forEach(function (photoEntry) {
                     const openButton = document.createElement("button");
+                    const photoName = normalizeTextValue(photoEntry && photoEntry.name) || "Photo";
+                    const photoId = normalizeTextValue(photoEntry && photoEntry.id);
+
                     openButton.type = "button";
                     openButton.className = "saved-photo-open-button";
                     openButton.setAttribute("data-open-photo-name", photoName);
+
+                    if (photoId) {
+                        openButton.setAttribute("data-open-photo-id", photoId);
+                    }
+
                     openButton.textContent = photoName;
                     photoLinks.appendChild(openButton);
                 });
+
                 photosRow.appendChild(photosLabel);
                 photosRow.appendChild(photoLinks);
                 item.appendChild(photosRow);
@@ -5444,6 +5783,29 @@ function updateWrapUpSummary() {
     }
 }
 
+function shouldOpenGpsMapInSameTab() {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+        || window.navigator.standalone === true;
+    const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent || "");
+    return isStandalone || isIos;
+}
+
+function buildGpsMapUrl(payload) {
+    const fallbackUrl = "./gps-map.html";
+
+    try {
+        const encodedPayload = encodeURIComponent(JSON.stringify(payload));
+
+        if (!encodedPayload || encodedPayload.length > 180000) {
+            return fallbackUrl;
+        }
+
+        return fallbackUrl + "#payload=" + encodedPayload;
+    } catch (_error) {
+        return fallbackUrl;
+    }
+}
+
 function openGpsPointsMap() {
     const gpsPoints = getSavedGpsPointsForMap();
 
@@ -5471,11 +5833,18 @@ function openGpsPointsMap() {
         // Non-fatal: map page may still receive payload from sessionStorage.
     }
 
-    const mapWindow = window.open("./gps-map.html", "_blank");
+    const mapUrl = buildGpsMapUrl(payload);
+
+    if (shouldOpenGpsMapInSameTab()) {
+        window.location.href = mapUrl;
+        return;
+    }
+
+    const mapWindow = window.open(mapUrl, "_blank");
 
     if (!mapWindow) {
         // Popup likely blocked: continue in the same tab so the user still gets the map.
-        window.location.href = "./gps-map.html";
+        window.location.href = mapUrl;
     }
 }
 
