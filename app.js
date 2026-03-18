@@ -12,6 +12,7 @@ const appDataDatabaseVersion = 2;
 const appDataSessionEntryKey = "session";
 const appDataProjectsEntryKey = "projects";
 const gpsMapPayloadStorageKey = "archaeolab-gps-map-payload-v1";
+const sessionBackupFormatVersion = 2;
 const maxProjectImageSizeBytes = 4 * 1024 * 1024;
 const maxReferencePhotoSizeBytes = 4 * 1024 * 1024;
 const maxImageSourceSizeBytes = 20 * 1024 * 1024;
@@ -3137,6 +3138,181 @@ function collectPhotoIdsFromProjects(projects) {
     return Array.from(photoIds);
 }
 
+function buildPhotoMetadataMapFromStps(stps) {
+    const photoMetadata = new Map();
+
+    (stps || []).forEach(function (stp) {
+        (stp.strata || []).forEach(function (stratum) {
+            getStratumPhotoEntries(stratum).forEach(function (entry) {
+                const normalizedEntry = normalizePhotoEntry(entry);
+
+                if (!normalizedEntry.id || photoMetadata.has(normalizedEntry.id)) {
+                    return;
+                }
+
+                photoMetadata.set(normalizedEntry.id, {
+                    name: normalizedEntry.name,
+                    type: normalizedEntry.type,
+                    size: normalizedEntry.size
+                });
+            });
+        });
+    });
+
+    return photoMetadata;
+}
+
+function normalizePhotoBackupEntry(entry) {
+    const rawEntry = entry && typeof entry === "object" ? entry : {};
+
+    return {
+        id: normalizeTextValue(rawEntry.id),
+        name: normalizeTextValue(rawEntry.name),
+        type: normalizeTextValue(rawEntry.type),
+        size: Number.isFinite(Number(rawEntry.size)) ? Number(rawEntry.size) : 0,
+        dataUrl: typeof rawEntry.dataUrl === "string" ? rawEntry.dataUrl : ""
+    };
+}
+
+async function buildSessionBackupPayload() {
+    const sessionSnapshot = normalizeImportedSession(state);
+    const bundledPhotos = [];
+    const missingPhotoIds = [];
+    const photoMetadata = buildPhotoMetadataMapFromStps(sessionSnapshot.stps);
+
+    for (const [photoId, metadata] of photoMetadata.entries()) {
+        try {
+            const blobValue = await readPhotoBlobFromDatabase(photoId);
+
+            if (!blobValue) {
+                missingPhotoIds.push(photoId);
+                continue;
+            }
+
+            bundledPhotos.push({
+                id: photoId,
+                name: metadata.name,
+                type: metadata.type || blobValue.type || "",
+                size: metadata.size || blobValue.size || 0,
+                dataUrl: await readFileAsDataUrl(blobValue)
+            });
+        } catch (error) {
+            console.warn("Could not bundle STP photo for JSON backup.", error);
+            missingPhotoIds.push(photoId);
+        }
+    }
+
+    return {
+        exportType: "archaeolab-session-backup",
+        formatVersion: sessionBackupFormatVersion,
+        exportedAt: new Date().toISOString(),
+        session: sessionSnapshot,
+        stpPhotos: bundledPhotos,
+        missingPhotoIds: missingPhotoIds
+    };
+}
+
+function extractSessionBackupPayload(parsedData) {
+    const rawBackup = parsedData && typeof parsedData === "object" ? parsedData : {};
+    const hasBackupEnvelope = rawBackup.exportType === "archaeolab-session-backup"
+        && rawBackup.session
+        && typeof rawBackup.session === "object";
+
+    if (!hasBackupEnvelope) {
+        return {
+            sessionData: rawBackup,
+            bundledPhotos: [],
+            missingPhotoIds: [],
+            formatVersion: 1
+        };
+    }
+
+    return {
+        sessionData: rawBackup.session,
+        bundledPhotos: (Array.isArray(rawBackup.stpPhotos) ? rawBackup.stpPhotos : [])
+            .map(normalizePhotoBackupEntry)
+            .filter(function (entry) {
+                return Boolean(entry.id) && /^data:/i.test(entry.dataUrl);
+            }),
+        missingPhotoIds: (Array.isArray(rawBackup.missingPhotoIds) ? rawBackup.missingPhotoIds : [])
+            .map(normalizeTextValue)
+            .filter(Boolean),
+        formatVersion: Number.isFinite(Number(rawBackup.formatVersion)) ? Number(rawBackup.formatVersion) : 1
+    };
+}
+
+async function restoreBundledPhotoEntries(photoEntries) {
+    const normalizedEntries = Array.isArray(photoEntries)
+        ? photoEntries.map(normalizePhotoBackupEntry).filter(function (entry) {
+            return Boolean(entry.id) && /^data:/i.test(entry.dataUrl);
+        })
+        : [];
+    const restoredPhotoIds = [];
+    const failedPhotoIds = [];
+
+    if (normalizedEntries.length === 0) {
+        return {
+            restoredPhotoIds: restoredPhotoIds,
+            failedPhotoIds: failedPhotoIds
+        };
+    }
+
+    if (!supportsIndexedDbPersistence()) {
+        return {
+            restoredPhotoIds: restoredPhotoIds,
+            failedPhotoIds: normalizedEntries.map(function (entry) {
+                return entry.id;
+            })
+        };
+    }
+
+    for (const entry of normalizedEntries) {
+        try {
+            const blobValue = dataUrlToBlob(entry.dataUrl, entry.type);
+            await savePhotoBlobToDatabase(entry.id, blobValue);
+            restoredPhotoIds.push(entry.id);
+        } catch (error) {
+            console.warn("Could not restore STP photo from JSON backup.", error);
+            failedPhotoIds.push(entry.id);
+        }
+    }
+
+    return {
+        restoredPhotoIds: restoredPhotoIds,
+        failedPhotoIds: failedPhotoIds
+    };
+}
+
+function stripUnavailableImportedPhotoIds(importedSession, availablePhotoIds) {
+    const keepIds = new Set((availablePhotoIds || []).filter(Boolean));
+
+    importedSession.stps = (importedSession.stps || []).map(function (stp) {
+        return Object.assign({}, stp, {
+            strata: (stp.strata || []).map(function (stratum) {
+                const filteredPhotos = getStratumPhotoEntries(stratum).map(function (entry) {
+                    const normalizedEntry = normalizePhotoEntry(entry);
+
+                    return {
+                        id: keepIds.has(normalizedEntry.id) ? normalizedEntry.id : "",
+                        name: normalizedEntry.name,
+                        type: normalizedEntry.type,
+                        size: normalizedEntry.size
+                    };
+                });
+
+                return Object.assign({}, stratum, {
+                    photoNames: filteredPhotos.map(function (entry) {
+                        return entry.name;
+                    }).filter(Boolean),
+                    photos: filteredPhotos
+                });
+            })
+        });
+    });
+
+    return importedSession;
+}
+
 async function cleanupDeletedPhotoIds(candidatePhotoIds, projectsSnapshot) {
     const candidates = Array.from(new Set((candidatePhotoIds || []).filter(Boolean)));
 
@@ -4283,27 +4459,45 @@ function downloadExcelReadyCsv() {
     triggerCsvDownload(csvText, filenameBase + ".csv");
 }
 
-function downloadSessionData() {
+async function downloadSessionData() {
     if (state.stps.length === 0) {
         alert("Save at least one STP before downloading the session backup.");
         return;
     }
 
-    const filenameBase = (state.siteName || "archaeolab-stp-session")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-+|-+$/g, "");
+    try {
+        const filenameBase = (state.siteName || "archaeolab-stp-session")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+        const backupPayload = await buildSessionBackupPayload();
+        const fileBlob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: "application/json" });
+        const downloadUrl = URL.createObjectURL(fileBlob);
+        const link = document.createElement("a");
+        const bundledPhotoCount = backupPayload.stpPhotos.length;
+        const missingPhotoCount = backupPayload.missingPhotoIds.length;
 
-    const fileBlob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
-    const downloadUrl = URL.createObjectURL(fileBlob);
-    const link = document.createElement("a");
+        link.href = downloadUrl;
+        link.download = (filenameBase || "archaeolab-stp-session") + ".json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(downloadUrl);
 
-    link.href = downloadUrl;
-    link.download = (filenameBase || "archaeolab-stp-session") + ".json";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(downloadUrl);
+        setReferencePhotoMessage(
+            missingPhotoCount > 0
+                ? "JSON backup downloaded. Bundled "
+                    + String(bundledPhotoCount)
+                    + " saved STP photo(s); "
+                    + String(missingPhotoCount)
+                    + " photo(s) were not available in app storage and were not included."
+                : "JSON backup downloaded. Bundled " + String(bundledPhotoCount) + " saved STP photo(s).",
+            missingPhotoCount > 0
+        );
+    } catch (error) {
+        console.warn("Could not download JSON backup.", error);
+        alert("Could not download JSON backup.");
+    }
 }
 
 function requestImportCsvFile() {
@@ -4681,10 +4875,51 @@ function handleImportSessionFile() {
         try {
             const rawText = String(reader.result || "");
             const parsedData = JSON.parse(rawText);
-            const importedSession = normalizeImportedSession(parsedData);
+            const backupPayload = extractSessionBackupPayload(parsedData);
+            let importedSession = normalizeImportedSession(backupPayload.sessionData);
+            const bundledPhotoCount = backupPayload.bundledPhotos.length;
+            let photoImportMessage = "";
+            let photoImportIsError = false;
 
-            if (!confirm("Import this JSON backup and replace the current session?")) {
+            if (!confirm(
+                bundledPhotoCount > 0
+                    ? "Import this JSON backup and replace the current session? "
+                        + String(bundledPhotoCount)
+                        + " STP photo file(s) will also be restored."
+                    : "Import this JSON backup and replace the current session?"
+            )) {
                 return;
+            }
+
+            if (bundledPhotoCount > 0) {
+                const restoreResult = await restoreBundledPhotoEntries(backupPayload.bundledPhotos);
+
+                if (restoreResult.failedPhotoIds.length > 0) {
+                    stripUnavailableImportedPhotoIds(importedSession, restoreResult.restoredPhotoIds);
+                    photoImportIsError = true;
+                }
+
+                photoImportMessage = restoreResult.failedPhotoIds.length > 0
+                    ? "Restored "
+                        + String(restoreResult.restoredPhotoIds.length)
+                        + " STP photo(s); "
+                        + String(restoreResult.failedPhotoIds.length)
+                        + " could not be restored."
+                    : "Restored " + String(restoreResult.restoredPhotoIds.length) + " STP photo(s).";
+            } else {
+                const referencedPhotoCount = collectPhotoIdsFromStps(importedSession.stps).length;
+
+                if (referencedPhotoCount > 0) {
+                    photoImportMessage = "Legacy JSON backup: STP photo labels imported, but this older backup does not include the actual STP photo files.";
+                }
+            }
+
+            if (backupPayload.missingPhotoIds.length > 0) {
+                photoImportMessage += (photoImportMessage ? " " : "")
+                    + "Backup file was created with "
+                    + String(backupPayload.missingPhotoIds.length)
+                    + " STP photo(s) already missing from app storage.";
+                photoImportIsError = true;
             }
 
             const removedPhotoIds = collectPhotoIdsFromStps(state.stps);
@@ -4714,7 +4949,7 @@ function handleImportSessionFile() {
             renderReferencePhoto();
             resetCurrentStp(false);
             setProjectImageMessage("Imported session backup: " + file.name, false);
-            setReferencePhotoMessage("", false);
+            setReferencePhotoMessage(photoImportMessage, photoImportIsError);
 
             try {
                 await cleanupDeletedPhotoIds(removedPhotoIds);
@@ -5321,6 +5556,27 @@ function readFileAsDataUrl(file) {
         });
         reader.readAsDataURL(file);
     });
+}
+
+function dataUrlToBlob(dataUrl, fallbackType) {
+    const normalizedDataUrl = String(dataUrl || "");
+    const dataUrlMatch = /^data:([^;,]+)?(;base64)?,(.*)$/i.exec(normalizedDataUrl);
+
+    if (!dataUrlMatch) {
+        throw new Error("Invalid data URL.");
+    }
+
+    const mimeType = dataUrlMatch[1] || fallbackType || "application/octet-stream";
+    const isBase64 = Boolean(dataUrlMatch[2]);
+    const payload = dataUrlMatch[3] || "";
+    const byteString = isBase64 ? atob(payload) : decodeURIComponent(payload);
+    const bytes = new Uint8Array(byteString.length);
+
+    for (let index = 0; index < byteString.length; index += 1) {
+        bytes[index] = byteString.charCodeAt(index);
+    }
+
+    return new Blob([bytes], { type: mimeType });
 }
 
 function loadImageFromDataUrl(dataUrl) {
