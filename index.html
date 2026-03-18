@@ -91,7 +91,10 @@
         <div id="flowNavigator" class="panel flow-navigator" aria-label="Workflow navigation">
             <div class="flow-navigator-head">
                 <p class="flow-navigator-title">Workflow Navigator</p>
-                <button type="button" id="flowToggleButton" class="ghost-button flow-nav-toggle" aria-pressed="true">Flow View: On</button>
+                <div class="flow-navigator-toggles">
+                    <button type="button" id="fieldModeToggleButton" class="ghost-button flow-nav-toggle" aria-pressed="true">Field Mode: On</button>
+                    <button type="button" id="flowToggleButton" class="ghost-button flow-nav-toggle" aria-pressed="true">Flow View: On</button>
+                </div>
             </div>
             <div class="flow-navigator-controls">
                 <button type="button" id="flowPrevButton" class="ghost-button">&#8592; Previous</button>
@@ -105,7 +108,7 @@
         </div>
 
         <main class="workspace">
-            <section class="panel tester-guide-panel" data-flow-step="guide" data-flow-label="Tester Guide">
+            <section class="panel tester-guide-panel" data-flow-step="guide" data-flow-label="Tester Guide" data-field-mode-hide>
                 <div class="section-head">
                     <div>
                         <h2>Tester Quick Guide</h2>
@@ -126,7 +129,7 @@
                 </p>
             </section>
 
-            <section class="panel" data-flow-step="projects" data-flow-label="Project Library">
+            <section class="panel" data-flow-step="projects" data-flow-label="Project Library" data-field-mode-hide>
                 <div class="section-head">
                     <div>
                         <h2>Project Library <span id="projectsHeaderCount" class="section-count" aria-live="polite"></span></h2>

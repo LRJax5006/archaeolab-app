@@ -133,6 +133,13 @@ h1 {
     gap: 10px;
 }
 
+.flow-navigator-toggles {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
 .flow-navigator-title {
     margin: 0;
     font-size: 0.92rem;
@@ -190,6 +197,10 @@ h1 {
 }
 
 .flow-step-hidden {
+    display: none !important;
+}
+
+.field-mode-hidden {
     display: none !important;
 }
 
@@ -2023,6 +2034,10 @@ body.dark-contrast .map-viewer-img {
 
     .flow-nav-toggle {
         width: auto;
+    }
+
+    .flow-navigator-toggles {
+        justify-content: stretch;
     }
 
     .entry-photo-library-item {

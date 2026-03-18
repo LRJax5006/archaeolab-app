@@ -3,6 +3,7 @@ const projectsStorageKey = "archaeolab-projects-v1";
 const filterStorageKey = "archaeolab-ui-filters-v1";
 const contrastModeStorageKey = "archaeolab-contrast-mode-v1";
 const flowModeStorageKey = "archaeolab-flow-mode-v1";
+const fieldModeStorageKey = "archaeolab-field-mode-v1";
 const importQualityModeStorageKey = "archaeolab-import-quality-mode-v1";
 const coreDataBackupStorageKey = "archaeolab-stp-core-backup-v1";
 const projectsCoreBackupStorageKey = "archaeolab-project-latest-core-backup-v1";
@@ -73,6 +74,7 @@ let referencePhotoPreviewEntryKey = "";
 let designatedJsonBackupFileName = "";
 let designatedJsonBackupLastSavedAt = "";
 let backupDestinationStatusRequestId = 0;
+let fieldModeEnabled = true;
 let flowModeEnabled = true;
 let flowSteps = [];
 let activeFlowStepId = "";
@@ -534,6 +536,7 @@ function cacheElements() {
     elements.flowStepSelect = document.getElementById("flowStepSelect");
     elements.flowPrevButton = document.getElementById("flowPrevButton");
     elements.flowNextButton = document.getElementById("flowNextButton");
+    elements.fieldModeToggleButton = document.getElementById("fieldModeToggleButton");
     elements.flowToggleButton = document.getElementById("flowToggleButton");
     elements.flowStepStatus = document.getElementById("flowStepStatus");
 }
@@ -595,6 +598,10 @@ function bindEvents() {
 
     if (elements.flowNextButton) {
         elements.flowNextButton.addEventListener("click", handleFlowStepNext);
+    }
+
+    if (elements.fieldModeToggleButton) {
+        elements.fieldModeToggleButton.addEventListener("click", handleFieldModeToggle);
     }
 
     if (elements.flowToggleButton) {
@@ -1216,7 +1223,7 @@ function getFlowStepElementsById(stepId) {
 function getAvailableFlowSteps() {
     return flowSteps.filter(function (step) {
         return getFlowStepElementsById(step.id).some(function (element) {
-            return !element.hidden;
+            return !element.hidden && !element.classList.contains("field-mode-hidden");
         });
     });
 }
@@ -1238,6 +1245,23 @@ function updateFlowToggleButton() {
     elements.flowToggleButton.textContent = buttonLabel;
     elements.flowToggleButton.setAttribute("aria-pressed", flowModeEnabled ? "true" : "false");
     elements.flowToggleButton.setAttribute("aria-label", buttonLabel);
+}
+
+function updateFieldModeToggleButton() {
+    if (!elements.fieldModeToggleButton) {
+        return;
+    }
+
+    const buttonLabel = fieldModeEnabled ? "Field Mode: On" : "Field Mode: Off";
+    elements.fieldModeToggleButton.textContent = buttonLabel;
+    elements.fieldModeToggleButton.setAttribute("aria-pressed", fieldModeEnabled ? "true" : "false");
+    elements.fieldModeToggleButton.setAttribute("aria-label", buttonLabel);
+}
+
+function applyFieldModeSectionVisibility() {
+    Array.from(document.querySelectorAll("[data-field-mode-hide]")).forEach(function (element) {
+        element.classList.toggle("field-mode-hidden", fieldModeEnabled);
+    });
 }
 
 function applyFlowStepVisibility() {
@@ -1286,6 +1310,7 @@ function syncFlowNavigatorState(shouldScrollToActiveStep) {
             elements.flowNextButton.disabled = true;
         }
         elements.flowStepStatus.textContent = "No workflow sections are available.";
+        updateFieldModeToggleButton();
         applyFlowStepVisibility();
         updateFlowToggleButton();
         return;
@@ -1321,6 +1346,7 @@ function syncFlowNavigatorState(shouldScrollToActiveStep) {
     }
 
     const modeText = flowModeEnabled ? "Flow pages on." : "Flow pages off.";
+    const fieldModeText = fieldModeEnabled ? "Field mode on." : "Field mode off.";
     elements.flowStepStatus.textContent = "Step "
         + String(currentIndex + 1)
         + " of "
@@ -1328,8 +1354,11 @@ function syncFlowNavigatorState(shouldScrollToActiveStep) {
         + ": "
         + getFlowStepLabel(activeFlowStepId)
         + ". "
-        + modeText;
+        + modeText
+        + " "
+        + fieldModeText;
 
+    updateFieldModeToggleButton();
     applyFlowStepVisibility();
     updateFlowToggleButton();
 
@@ -1375,6 +1404,7 @@ function initializeFlowNavigator() {
     }
 
     let storedFlowMode = "on";
+    let storedFieldMode = "on";
 
     try {
         storedFlowMode = normalizeSearchToken(localStorage.getItem(flowModeStorageKey) || "on");
@@ -1382,8 +1412,16 @@ function initializeFlowNavigator() {
         console.warn("Could not load flow mode preference.", error);
     }
 
+    try {
+        storedFieldMode = normalizeSearchToken(localStorage.getItem(fieldModeStorageKey) || "on");
+    } catch (error) {
+        console.warn("Could not load field mode preference.", error);
+    }
+
     flowModeEnabled = storedFlowMode !== "off";
-    activeFlowStepId = flowSteps[0].id;
+    fieldModeEnabled = storedFieldMode !== "off";
+    applyFieldModeSectionVisibility();
+    activeFlowStepId = fieldModeEnabled ? "site" : flowSteps[0].id;
     syncFlowNavigatorState(false);
 }
 
@@ -1433,6 +1471,30 @@ function handleFlowStepNext() {
 
 function handleFlowToggle() {
     applyFlowMode(!flowModeEnabled, true, false);
+}
+
+function applyFieldMode(enabled, shouldPersist, shouldScrollToDefaultStep) {
+    fieldModeEnabled = Boolean(enabled);
+
+    if (shouldPersist) {
+        try {
+            localStorage.setItem(fieldModeStorageKey, fieldModeEnabled ? "on" : "off");
+        } catch (error) {
+            console.warn("Could not save field mode preference.", error);
+        }
+    }
+
+    applyFieldModeSectionVisibility();
+
+    if (fieldModeEnabled) {
+        activeFlowStepId = "site";
+    }
+
+    syncFlowNavigatorState(Boolean(shouldScrollToDefaultStep));
+}
+
+function handleFieldModeToggle() {
+    applyFieldMode(!fieldModeEnabled, true, true);
 }
 
 function updateProjectFilterSummary(totalCount, matchedCount, searchTerm, sortValue) {
@@ -3905,6 +3967,22 @@ function resetCurrentStp(shouldFocus) {
     updateActiveStpBar();
 }
 
+function handlePostStpSaveFlowAdvance() {
+    if (!fieldModeEnabled) {
+        return;
+    }
+
+    setActiveFlowStep("strata", true);
+
+    const firstDepthField = elements.strataList
+        ? elements.strataList.querySelector('[data-field="depth"]')
+        : null;
+
+    if (firstDepthField) {
+        firstDepthField.focus();
+    }
+}
+
 function hasCurrentDraftData() {
     const hasHeaderData = Boolean(
         normalizeTextValue(elements.gpsLatitude && elements.gpsLatitude.value)
@@ -4112,6 +4190,7 @@ async function saveCurrentStp() {
         renderSavedStps();
         await saveAutoJsonBackupAfterStpSave();
         resetCurrentStp(true);
+        handlePostStpSaveFlowAdvance();
     } catch (error) {
         console.warn("Could not save STP photos.", error);
 
@@ -4142,6 +4221,7 @@ async function saveCurrentStp() {
         await saveAutoJsonBackupAfterStpSave();
         resetCurrentStp(true);
         alert("STP data saved without photos. Re-add photos later if needed.");
+        handlePostStpSaveFlowAdvance();
     } finally {
         setSaveButtonsDisabled(false);
     }
