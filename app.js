@@ -21,7 +21,7 @@ const defaultReferencePhotoSrc = "IMG_3376.JPG";
 const defaultMapViewerTitle = "Project Map Reference";
 const gpsCoordinateDecimalPlaces = 6;
 const persistStratumPhotoBlobsInBrowser = true;
-const autoCsvBackupOnStartNewStp = true;
+const autoJsonBackupOnSaveStp = true;
 const importQualityProfiles = {
     balanced: {
         maxDimension: 2600,
@@ -3649,7 +3649,6 @@ function startNewStpFromCurrent() {
         }
     }
 
-    downloadAutoCsvForNewStp();
     resetCurrentStp(true);
 }
 
@@ -3815,7 +3814,7 @@ async function saveCurrentStp() {
 
         refreshParentStpOptions();
         renderSavedStps();
-        downloadAutoCsvForNewStp();
+        await saveAutoJsonBackupAfterStpSave();
         resetCurrentStp(true);
     } catch (error) {
         console.warn("Could not save STP photos.", error);
@@ -3844,7 +3843,7 @@ async function saveCurrentStp() {
 
         refreshParentStpOptions();
         renderSavedStps();
-        downloadAutoCsvForNewStp();
+        await saveAutoJsonBackupAfterStpSave();
         resetCurrentStp(true);
         alert("STP data saved without photos. Re-add photos later if needed.");
     } finally {
@@ -4390,62 +4389,163 @@ function triggerCsvDownload(csvText, filename) {
     URL.revokeObjectURL(downloadUrl);
 }
 
-function buildAutoCsvFilename() {
-    return (buildFilenameBase() || "archaeolab-stp-export") + ".csv";
+function triggerJsonDownload(jsonText, filename) {
+    const fileBlob = new Blob([jsonText], { type: "application/json" });
+    const downloadUrl = URL.createObjectURL(fileBlob);
+    const link = document.createElement("a");
+
+    link.href = downloadUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
 }
 
-async function downloadAutoCsvForNewStp() {
-    if (!autoCsvBackupOnStartNewStp || state.stps.length === 0) {
-        return;
+function buildSessionBackupFilenameBase() {
+    return (state.siteName || "archaeolab-stp-session")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}
+
+function buildJsonBackupHandleKey(siteSlug) {
+    return "session-json-backup:" + siteSlug;
+}
+
+async function resolveDesignatedJsonBackupHandle(siteSlug, suggestedName, shouldPromptIfMissing) {
+    if (typeof window.showSaveFilePicker !== "function" || !supportsIndexedDbPersistence()) {
+        return null;
     }
 
-    const csvText = buildExcelReadyCsvText();
-    const siteSlug = buildFilenameBase() || "archaeolab-stp-export";
-    const suggestedName = siteSlug + ".csv";
+    const handleKey = buildJsonBackupHandleKey(siteSlug);
+    let fileHandle = await readFileHandle(handleKey);
 
-    // Use File System Access API for silent, accumulating writes when available
-    if (typeof window.showSaveFilePicker === "function" && supportsIndexedDbPersistence()) {
-        try {
-            let fileHandle = await readFileHandle(siteSlug);
+    if (fileHandle) {
+        const permission = await fileHandle.queryPermission({ mode: "readwrite" });
 
-            if (fileHandle) {
-                // Revalidate permission (we are inside a user-gesture call chain)
-                const permission = await fileHandle.queryPermission({ mode: "readwrite" });
-
-                if (permission === "prompt") {
-                    const result = await fileHandle.requestPermission({ mode: "readwrite" });
-                    if (result !== "granted") {
-                        fileHandle = null;
-                    }
-                } else if (permission === "denied") {
-                    fileHandle = null;
-                }
+        if (permission === "prompt") {
+            const result = await fileHandle.requestPermission({ mode: "readwrite" });
+            if (result !== "granted") {
+                fileHandle = null;
             }
-
-            if (!fileHandle) {
-                // First time for this site — ask once where to save
-                fileHandle = await window.showSaveFilePicker({
-                    suggestedName: suggestedName,
-                    types: [{ description: "CSV file", accept: { "text/csv": [".csv"] } }],
-                    excludeAcceptAllOption: true
-                });
-                await writeFileHandle(siteSlug, fileHandle);
-            }
-
-            const writable = await fileHandle.createWritable();
-            await writable.write(csvText);
-            await writable.close();
-            return;
-        } catch (err) {
-            if (err.name === "AbortError") {
-                return; // User dismissed the picker
-            }
-            // Other errors fall through to the download fallback
+        } else if (permission === "denied") {
+            fileHandle = null;
         }
     }
 
-    // Fallback: standard browser download
-    triggerCsvDownload(csvText, suggestedName);
+    if (!fileHandle && shouldPromptIfMissing) {
+        fileHandle = await window.showSaveFilePicker({
+            suggestedName: suggestedName,
+            types: [{ description: "JSON backup", accept: { "application/json": [".json"] } }],
+            excludeAcceptAllOption: true
+        });
+        await writeFileHandle(handleKey, fileHandle);
+    }
+
+    return fileHandle;
+}
+
+async function saveJsonBackupToPreferredDestination(backupPayload, options) {
+    const allowDownloadFallback = !options || options.allowDownloadFallback !== false;
+    const shouldPromptIfMissing = !options || options.shouldPromptIfMissing !== false;
+    const siteSlug = buildFilenameBase() || "archaeolab-stp-export";
+    const filenameBase = buildSessionBackupFilenameBase() || "archaeolab-stp-session";
+    const suggestedName = filenameBase + ".json";
+    const jsonText = JSON.stringify(backupPayload, null, 2);
+    const supportsDesignatedFile = typeof window.showSaveFilePicker === "function" && supportsIndexedDbPersistence();
+
+    if (supportsDesignatedFile) {
+        try {
+            const fileHandle = await resolveDesignatedJsonBackupHandle(siteSlug, suggestedName, shouldPromptIfMissing);
+
+            if (fileHandle) {
+                const writable = await fileHandle.createWritable();
+                await writable.write(jsonText);
+                await writable.close();
+
+                return {
+                    savedToDesignatedFile: true,
+                    downloaded: false,
+                    cancelled: false,
+                    unavailable: false
+                };
+            }
+        } catch (error) {
+            if (error && error.name === "AbortError") {
+                return {
+                    savedToDesignatedFile: false,
+                    downloaded: false,
+                    cancelled: true,
+                    unavailable: false
+                };
+            }
+
+            console.warn("Could not write JSON backup to designated file.", error);
+        }
+    }
+
+    if (allowDownloadFallback) {
+        triggerJsonDownload(jsonText, suggestedName);
+        return {
+            savedToDesignatedFile: false,
+            downloaded: true,
+            cancelled: false,
+            unavailable: !supportsDesignatedFile
+        };
+    }
+
+    return {
+        savedToDesignatedFile: false,
+        downloaded: false,
+        cancelled: false,
+        unavailable: !supportsDesignatedFile
+    };
+}
+
+async function saveAutoJsonBackupAfterStpSave() {
+    if (!autoJsonBackupOnSaveStp || state.stps.length === 0) {
+        return;
+    }
+
+    try {
+        const backupPayload = await buildSessionBackupPayload();
+        const backupResult = await saveJsonBackupToPreferredDestination(backupPayload, {
+            allowDownloadFallback: false,
+            shouldPromptIfMissing: true
+        });
+        const missingPhotoCount = backupPayload.missingPhotoIds.length;
+
+        if (backupResult.savedToDesignatedFile) {
+            setReferencePhotoMessage(
+                missingPhotoCount > 0
+                    ? "Auto JSON backup updated in designated file, but "
+                        + String(missingPhotoCount)
+                        + " photo(s) were already missing from app storage and were not included."
+                    : "Auto JSON backup updated in designated backup file.",
+                missingPhotoCount > 0
+            );
+            return;
+        }
+
+        if (backupResult.cancelled) {
+            setReferencePhotoMessage(
+                "Auto JSON backup was skipped. Choose a file when prompted to enable between-STP backups.",
+                true
+            );
+            return;
+        }
+
+        if (backupResult.unavailable) {
+            setReferencePhotoMessage(
+                "Auto JSON backup requires browser file-save support. Use Download JSON Backup + Photos manually.",
+                true
+            );
+        }
+    } catch (error) {
+        console.warn("Could not complete auto JSON backup.", error);
+        setReferencePhotoMessage("Auto JSON backup failed. Use Download JSON Backup + Photos.", true);
+    }
 }
 
 function downloadExcelReadyCsv() {
@@ -4466,32 +4566,36 @@ async function downloadSessionData() {
     }
 
     try {
-        const filenameBase = (state.siteName || "archaeolab-stp-session")
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-+|-+$/g, "");
         const backupPayload = await buildSessionBackupPayload();
-        const fileBlob = new Blob([JSON.stringify(backupPayload, null, 2)], { type: "application/json" });
-        const downloadUrl = URL.createObjectURL(fileBlob);
-        const link = document.createElement("a");
+        const backupResult = await saveJsonBackupToPreferredDestination(backupPayload, {
+            allowDownloadFallback: true,
+            shouldPromptIfMissing: true
+        });
         const bundledPhotoCount = backupPayload.stpPhotos.length;
         const missingPhotoCount = backupPayload.missingPhotoIds.length;
 
-        link.href = downloadUrl;
-        link.download = (filenameBase || "archaeolab-stp-session") + ".json";
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(downloadUrl);
+        if (backupResult.cancelled) {
+            return;
+        }
+
+        const destinationText = backupResult.savedToDesignatedFile
+            ? "to the designated backup file"
+            : "as a download";
 
         setReferencePhotoMessage(
             missingPhotoCount > 0
-                ? "JSON backup downloaded. Bundled "
+                ? "JSON backup saved "
+                    + destinationText
+                    + ". Bundled "
                     + String(bundledPhotoCount)
                     + " saved STP photo(s); "
                     + String(missingPhotoCount)
                     + " photo(s) were not available in app storage and were not included."
-                : "JSON backup downloaded. Bundled " + String(bundledPhotoCount) + " saved STP photo(s).",
+                : "JSON backup saved "
+                    + destinationText
+                    + ". Bundled "
+                    + String(bundledPhotoCount)
+                    + " saved STP photo(s).",
             missingPhotoCount > 0
         );
     } catch (error) {
