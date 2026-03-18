@@ -255,11 +255,17 @@
                             <p>Keep a field image visible while entering site details, strata descriptions, and notes.</p>
                             <div class="entry-photo-actions">
                                 <button type="button" id="openReferencePhotoButton" class="secondary-button">Open Reference Photo</button>
+                                <button type="button" id="closeReferencePhotoPreviewButton" class="ghost-button" hidden>Close Preview</button>
                                 <button type="button" id="clearReferencePhotoButton" class="ghost-button" hidden>Clear</button>
                             </div>
                             <input type="file" id="referencePhotoInput" accept="image/*" hidden>
                             <p id="referencePhotoMessage" class="entry-photo-message" aria-live="polite"></p>
                             <p id="referencePhotoSavedHint" class="entry-photo-saved-hint" hidden>Saved with session and project.</p>
+                            <details id="referencePhotoLibrary" class="entry-photo-library">
+                                <summary id="referencePhotoLibrarySummary">STP Photos In App</summary>
+                                <p class="entry-photo-library-note">Draft photos stay in app memory until Save STP. Saved STP photos are kept in app photo storage and can be previewed here.</p>
+                                <div id="referencePhotoLibraryList" class="entry-photo-library-list"></div>
+                            </details>
                         </div>
                     </aside>
                 </div>

@@ -61,6 +61,12 @@ let appDataDatabasePromise;
 let importQualityMode = "sharp";
 let pendingSavedPhotoOpenName = "";
 let activeMapViewerObjectUrl = "";
+let activeReferencePreviewObjectUrl = "";
+let referencePhotoPreviewSource = "";
+let referencePhotoPreviewTitle = "";
+let referencePhotoPreviewHint = "";
+let referencePhotoPreviewKind = "";
+let referencePhotoPreviewEntryKey = "";
 let lastTouchedStratumCard = null;
 let activeEditStpIndex = -1;
 let sessionSavePendingCount = 0;
@@ -480,8 +486,12 @@ function cacheElements() {
     elements.referencePhotoInput = document.getElementById("referencePhotoInput");
     elements.openReferencePhotoButton = document.getElementById("openReferencePhotoButton");
     elements.clearReferencePhotoButton = document.getElementById("clearReferencePhotoButton");
+    elements.closeReferencePhotoPreviewButton = document.getElementById("closeReferencePhotoPreviewButton");
     elements.referencePhotoMessage = document.getElementById("referencePhotoMessage");
     elements.referencePhotoSavedHint = document.getElementById("referencePhotoSavedHint");
+    elements.referencePhotoLibrary = document.getElementById("referencePhotoLibrary");
+    elements.referencePhotoLibrarySummary = document.getElementById("referencePhotoLibrarySummary");
+    elements.referencePhotoLibraryList = document.getElementById("referencePhotoLibraryList");
     elements.mapViewerModal = document.getElementById("mapViewerModal");
     elements.mapViewerTitle = document.getElementById("mapViewerTitle");
     elements.mapViewerImage = document.getElementById("mapViewerImage");
@@ -576,6 +586,16 @@ function bindEvents() {
         elements.clearReferencePhotoButton.addEventListener("click", function () {
             clearReferencePhoto(true);
         });
+    }
+
+    if (elements.closeReferencePhotoPreviewButton) {
+        elements.closeReferencePhotoPreviewButton.addEventListener("click", function () {
+            clearReferencePhotoPreview(true);
+        });
+    }
+
+    if (elements.referencePhotoLibraryList) {
+        elements.referencePhotoLibraryList.addEventListener("click", handleReferencePhotoLibraryClick);
     }
 
     elements.closeMapViewerButton.addEventListener("click", closeMapViewer);
@@ -2153,7 +2173,12 @@ function handleStrataListClick(event) {
         }
 
         const targetEntry = entries[openIndex];
-        requestSavedPhotoOpen(targetEntry.name, targetEntry.id);
+        requestSavedPhotoOpen(
+            targetEntry.name,
+            targetEntry.id,
+            targetEntry.pendingId,
+            buildCurrentDraftPhotoContextLabel(card)
+        );
         return;
     }
 
@@ -2350,16 +2375,22 @@ function handleSavedStpListClick(event) {
 
     const photoName = openButton.getAttribute("data-open-photo-name") || "Photo";
     const photoId = openButton.getAttribute("data-open-photo-id") || "";
-    requestSavedPhotoOpen(photoName, photoId);
+    const photoContext = openButton.getAttribute("data-open-photo-context") || "";
+    requestSavedPhotoOpen(photoName, photoId, "", photoContext);
 }
 
-function requestSavedPhotoOpenFromPicker(photoName) {
+function requestSavedPhotoOpenFromPicker(photoName, photoContext) {
     if (!elements.savedPhotoOpenInput) {
         alert("Photo opening is not available in this browser.");
         return;
     }
 
-    pendingSavedPhotoOpenName = normalizeTextValue(photoName) || "Photo";
+    const normalizedPhotoName = normalizeTextValue(photoName) || "Photo";
+    const normalizedPhotoContext = normalizeTextValue(photoContext);
+
+    pendingSavedPhotoOpenName = normalizedPhotoContext
+        ? normalizedPhotoName + " - " + normalizedPhotoContext
+        : normalizedPhotoName;
     elements.savedPhotoOpenInput.value = "";
 
     try {
@@ -2373,42 +2404,22 @@ function requestSavedPhotoOpenFromPicker(photoName) {
     }
 }
 
-async function tryOpenSavedPhotoFromDatabase(photoId, photoName) {
-    const normalizedPhotoId = normalizeTextValue(photoId);
-
-    if (!normalizedPhotoId || !supportsIndexedDbPersistence()) {
-        return false;
-    }
-
-    try {
-        const blobValue = await readPhotoBlobFromDatabase(normalizedPhotoId);
-
-        if (!blobValue) {
-            return false;
-        }
-
-        const objectUrl = URL.createObjectURL(blobValue);
-        openImageInModal(objectUrl, normalizeTextValue(photoName) || "Photo", true);
-        return true;
-    } catch (error) {
-        console.warn("Could not open saved photo from IndexedDB.", error);
-        return false;
-    }
-}
-
-function requestSavedPhotoOpen(photoName, photoId) {
+function requestSavedPhotoOpen(photoName, photoId, pendingId, photoContext) {
     const normalizedPhotoName = normalizeTextValue(photoName) || "Photo";
     const normalizedPhotoId = normalizeTextValue(photoId);
+    const normalizedPendingId = normalizeTextValue(pendingId);
+    const normalizedPhotoContext = normalizeTextValue(photoContext);
 
-    if (!normalizedPhotoId) {
-        requestSavedPhotoOpenFromPicker(normalizedPhotoName);
+    if (!normalizedPhotoId && !normalizedPendingId) {
+        requestSavedPhotoOpenFromPicker(normalizedPhotoName, normalizedPhotoContext);
         return;
     }
 
-    tryOpenSavedPhotoFromDatabase(normalizedPhotoId, normalizedPhotoName).then(function (opened) {
-        if (!opened) {
-            requestSavedPhotoOpenFromPicker(normalizedPhotoName);
-        }
+    openPhotoInReferencePanel({
+        photoName: normalizedPhotoName,
+        photoId: normalizedPhotoId,
+        pendingId: normalizedPendingId,
+        photoContext: normalizedPhotoContext
     });
 }
 
@@ -2431,7 +2442,20 @@ function handleSavedPhotoOpenSelection() {
 
     const objectUrl = URL.createObjectURL(file);
     const viewerTitle = pendingSavedPhotoOpenName || file.name || "Photo";
-    openImageInModal(objectUrl, viewerTitle, true);
+    setReferencePhotoPreview(
+        objectUrl,
+        viewerTitle,
+        "Opened from device storage for reference only. Use Open Reference Photo to save it with the session.",
+        "device",
+        "",
+        true
+    );
+    setReferencePhotoMessage("Opened " + (file.name || "photo") + " in the Reference Photo frame.", false);
+
+    const referencePanel = getReferencePhotoPanel();
+    if (referencePanel) {
+        referencePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
 
     elements.savedPhotoOpenInput.value = "";
     pendingSavedPhotoOpenName = "";
@@ -3220,6 +3244,7 @@ function renderPhotoListForCard(card) {
     }
 
     warningElement.textContent = card.dataset.photoWarning || "";
+    renderReferencePhotoLibrary();
     updateQuickPhotoControls();
 }
 
@@ -3376,6 +3401,10 @@ function handleUseCurrentGps() {
 }
 
 function resetCurrentStp(shouldFocus) {
+    if (referencePhotoPreviewKind === "draft") {
+        clearReferencePhotoPreview(false);
+    }
+
     releaseCurrentDraftPhotos();
     lastTouchedStratumCard = null;
     setActiveEditStpIndex(-1);
@@ -3892,10 +3921,12 @@ function renderSavedStps() {
                     const openButton = document.createElement("button");
                     const photoName = normalizeTextValue(photoEntry && photoEntry.name) || "Photo";
                     const photoId = normalizeTextValue(photoEntry && photoEntry.id);
+                    const photoContext = buildSavedPhotoContextLabel(stp, stratum);
 
                     openButton.type = "button";
                     openButton.className = "saved-photo-open-button";
                     openButton.setAttribute("data-open-photo-name", photoName);
+                    openButton.setAttribute("data-open-photo-context", photoContext);
 
                     if (photoId) {
                         openButton.setAttribute("data-open-photo-id", photoId);
@@ -3916,6 +3947,8 @@ function renderSavedStps() {
         card.appendChild(strataContainer);
         elements.savedStpList.appendChild(card);
     });
+
+    renderReferencePhotoLibrary();
 }
 
 function suggestFromCurrentInput() {
@@ -5499,12 +5532,380 @@ function setReferencePhotoMessage(text, isError) {
     elements.referencePhotoMessage.classList.toggle("is-error", Boolean(isError));
 }
 
+function getReferencePhotoPanel() {
+    return elements.referencePhotoImg
+        ? elements.referencePhotoImg.closest(".entry-photo-panel")
+        : null;
+}
+
+function releaseReferencePhotoPreview() {
+    if (activeReferencePreviewObjectUrl) {
+        URL.revokeObjectURL(activeReferencePreviewObjectUrl);
+        activeReferencePreviewObjectUrl = "";
+    }
+
+    referencePhotoPreviewSource = "";
+    referencePhotoPreviewTitle = "";
+    referencePhotoPreviewHint = "";
+    referencePhotoPreviewKind = "";
+    referencePhotoPreviewEntryKey = "";
+}
+
+function clearReferencePhotoPreview(showMessage) {
+    const hadPreview = Boolean(referencePhotoPreviewSource);
+
+    if (!hadPreview) {
+        return false;
+    }
+
+    releaseReferencePhotoPreview();
+    renderReferencePhoto();
+
+    if (showMessage) {
+        setReferencePhotoMessage(
+            state.referencePhoto
+                ? "Returned to the saved reference photo."
+                : "Closed STP photo preview. Showing the stock reference image.",
+            false
+        );
+    }
+
+    return true;
+}
+
+function setReferencePhotoPreview(imageSource, titleText, hintText, previewKind, previewEntryKey, shouldRevokeOnClear) {
+    releaseReferencePhotoPreview();
+    referencePhotoPreviewSource = imageSource || "";
+    referencePhotoPreviewTitle = titleText || "STP Photo";
+    referencePhotoPreviewHint = hintText || "";
+    referencePhotoPreviewKind = previewKind || "";
+    referencePhotoPreviewEntryKey = previewEntryKey || "";
+
+    if (shouldRevokeOnClear && imageSource) {
+        activeReferencePreviewObjectUrl = imageSource;
+    }
+
+    renderReferencePhoto();
+}
+
+function getReferencePhotoDisplayState() {
+    if (referencePhotoPreviewSource) {
+        return {
+            source: referencePhotoPreviewSource,
+            alt: referencePhotoPreviewTitle || "STP photo reference",
+            hint: referencePhotoPreviewHint || "Viewing STP photo in the reference frame.",
+            previewActive: true
+        };
+    }
+
+    if (state.referencePhoto) {
+        return {
+            source: state.referencePhoto,
+            alt: "Reference photo beside the STP data entry area",
+            hint: "Saved with session and project.",
+            previewActive: false
+        };
+    }
+
+    return {
+        source: defaultReferencePhotoSrc,
+        alt: "Reference photo beside the STP data entry area",
+        hint: "",
+        previewActive: false
+    };
+}
+
+function getStpDisplayLabel(entryType, stpLabel, supDirection) {
+    const normalizedLabel = normalizeTextValue(stpLabel);
+
+    if (!normalizedLabel) {
+        return "STP";
+    }
+
+    if (normalizeEntryTypeValue(entryType) === "supplemental") {
+        const normalizedSupDirection = normalizeSupDirectionValue(supDirection);
+
+        if (normalizedSupDirection) {
+            return normalizedLabel + normalizedSupDirection;
+        }
+    }
+
+    return normalizedLabel;
+}
+
+function buildCurrentDraftPhotoContextLabel(card) {
+    const stpDisplayLabel = getStpDisplayLabel(
+        elements.stpEntryType && elements.stpEntryType.value,
+        elements.stpLabel && elements.stpLabel.value,
+        elements.supDirection && elements.supDirection.value
+    );
+    const stratumField = card ? card.querySelector('[data-field="stratumLabel"]') : null;
+    const stratumLabel = normalizeTextValue(stratumField && stratumField.value);
+    const stpContext = stpDisplayLabel === "STP" ? "Current draft STP" : "Current draft STP " + stpDisplayLabel;
+
+    return stratumLabel ? stpContext + " \u00b7 Stratum " + stratumLabel : stpContext;
+}
+
+function buildSavedPhotoContextLabel(stp, stratum) {
+    const stpDisplayLabel = getStpDisplayLabel(stp && stp.entryType, stp && stp.stpLabel, stp && stp.supDirection);
+    const stratumLabel = normalizeTextValue(stratum && stratum.stratumLabel);
+    const stpContext = stpDisplayLabel === "STP" ? "Saved STP" : "Saved STP " + stpDisplayLabel;
+
+    return stratumLabel ? stpContext + " \u00b7 Stratum " + stratumLabel : stpContext;
+}
+
+async function openPhotoInReferencePanel(options) {
+    const normalizedPhotoName = normalizeTextValue(options && options.photoName) || "Photo";
+    const normalizedPhotoId = normalizeTextValue(options && options.photoId);
+    const normalizedPendingId = normalizeTextValue(options && options.pendingId);
+    const normalizedPhotoContext = normalizeTextValue(options && options.photoContext);
+    let blobValue = null;
+    let previewHint = "";
+    let previewKind = "";
+    let previewEntryKey = "";
+
+    if (normalizedPendingId) {
+        blobValue = draftPhotoBlobs.get(normalizedPendingId) || null;
+        previewHint = "Current draft photo in app memory. Save STP to keep it in app photo storage.";
+        previewKind = "draft";
+        previewEntryKey = "draft:" + normalizedPendingId;
+    } else if (normalizedPhotoId) {
+        try {
+            blobValue = await readPhotoBlobFromDatabase(normalizedPhotoId);
+        } catch (error) {
+            console.warn("Could not load saved photo from app storage.", error);
+            blobValue = null;
+        }
+
+        previewHint = "Saved STP photo stored in app photo storage.";
+        previewKind = "saved";
+        previewEntryKey = "saved:" + normalizedPhotoId;
+    }
+
+    if (!blobValue) {
+        setReferencePhotoMessage(
+            normalizedPhotoId
+                ? "This STP lists the photo, but the file is not currently available in app photo storage."
+                : "This draft photo is no longer available in app memory. Capture it again if needed.",
+            true
+        );
+        return false;
+    }
+
+    const objectUrl = URL.createObjectURL(blobValue);
+    const titleText = normalizedPhotoContext
+        ? normalizedPhotoName + " - " + normalizedPhotoContext
+        : normalizedPhotoName;
+
+    setReferencePhotoPreview(objectUrl, titleText, previewHint, previewKind, previewEntryKey, true);
+    setReferencePhotoMessage("Opened " + normalizedPhotoName + " in the Reference Photo frame.", false);
+
+    const referencePanel = getReferencePhotoPanel();
+    if (referencePanel) {
+        referencePanel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+
+    return true;
+}
+
+function buildReferencePhotoLibraryItems() {
+    const items = [];
+    const seenKeys = new Set();
+
+    function addItem(item) {
+        if (!item || !item.key || seenKeys.has(item.key)) {
+            return;
+        }
+
+        seenKeys.add(item.key);
+        items.push(item);
+    }
+
+    if (elements.strataList) {
+        Array.from(elements.strataList.querySelectorAll(".stratum-card")).forEach(function (card) {
+            const contextLabel = buildCurrentDraftPhotoContextLabel(card);
+
+            getCardPhotoEntries(card).forEach(function (entry, index) {
+                const normalizedEntry = normalizePhotoEntry(entry);
+                const photoName = normalizeTextValue(normalizedEntry.name) || "Photo " + String(index + 1);
+                const itemKey = normalizedEntry.pendingId
+                    ? "draft:" + normalizedEntry.pendingId
+                    : (normalizedEntry.id
+                        ? "saved:" + normalizedEntry.id
+                        : "draft-label:" + contextLabel + ":" + photoName + ":" + String(index));
+
+                addItem({
+                    key: itemKey,
+                    name: photoName,
+                    photoId: normalizedEntry.id,
+                    pendingId: normalizedEntry.pendingId,
+                    contextLabel: contextLabel,
+                    storageLabel: normalizedEntry.pendingId
+                        ? "Current draft"
+                        : (normalizedEntry.id ? "Saved in app" : "Label only"),
+                    canOpen: Boolean(normalizedEntry.pendingId || normalizedEntry.id),
+                    isDraft: Boolean(normalizedEntry.pendingId),
+                    isMissing: !normalizedEntry.pendingId && !normalizedEntry.id
+                });
+            });
+        });
+    }
+
+    state.stps.forEach(function (stp, stpIndex) {
+        if (isEditingSavedStp() && stpIndex === activeEditStpIndex) {
+            return;
+        }
+
+        (stp.strata || []).forEach(function (stratum) {
+            const contextLabel = buildSavedPhotoContextLabel(stp, stratum);
+
+            getStratumPhotoEntries(stratum).forEach(function (entry, index) {
+                const normalizedEntry = normalizePhotoEntry(entry);
+                const photoName = normalizeTextValue(normalizedEntry.name) || "Photo " + String(index + 1);
+                const itemKey = normalizedEntry.id
+                    ? "saved:" + normalizedEntry.id
+                    : "saved-label:" + contextLabel + ":" + photoName + ":" + String(index);
+
+                addItem({
+                    key: itemKey,
+                    name: photoName,
+                    photoId: normalizedEntry.id,
+                    pendingId: "",
+                    contextLabel: contextLabel,
+                    storageLabel: normalizedEntry.id ? "Saved in app" : "Label only",
+                    canOpen: Boolean(normalizedEntry.id),
+                    isDraft: false,
+                    isMissing: !normalizedEntry.id
+                });
+            });
+        });
+    });
+
+    return items;
+}
+
+function renderReferencePhotoLibrary() {
+    if (!elements.referencePhotoLibrarySummary || !elements.referencePhotoLibraryList) {
+        return;
+    }
+
+    const items = buildReferencePhotoLibraryItems();
+    const openableCount = items.filter(function (item) {
+        return item.canOpen;
+    }).length;
+    const labelOnlyCount = items.length - openableCount;
+
+    if (referencePhotoPreviewKind !== "device" && referencePhotoPreviewEntryKey) {
+        const previewStillExists = items.some(function (item) {
+            return item.key === referencePhotoPreviewEntryKey;
+        });
+
+        if (!previewStillExists) {
+            clearReferencePhotoPreview(false);
+        }
+    }
+
+    if (items.length === 0) {
+        elements.referencePhotoLibrarySummary.textContent = "STP Photos In App";
+    } else if (openableCount > 0) {
+        elements.referencePhotoLibrarySummary.textContent = "STP Photos In App (" + openableCount + ")";
+    } else {
+        elements.referencePhotoLibrarySummary.textContent = "STP Photos In App (labels only)";
+    }
+
+    elements.referencePhotoLibraryList.innerHTML = "";
+
+    if (items.length === 0) {
+        const emptyState = document.createElement("p");
+        emptyState.className = "entry-photo-library-empty";
+        emptyState.textContent = "No STP photos are in the app yet. Draft photos appear after capture. Saved STP photos appear here after Save STP.";
+        elements.referencePhotoLibraryList.appendChild(emptyState);
+        return;
+    }
+
+    items.forEach(function (item) {
+        const row = document.createElement("div");
+        row.className = "entry-photo-library-item";
+
+        const copy = document.createElement("div");
+        copy.className = "entry-photo-library-copy";
+
+        const name = document.createElement("p");
+        name.className = "entry-photo-library-name";
+        name.textContent = item.name;
+
+        const meta = document.createElement("p");
+        meta.className = "entry-photo-library-meta";
+        meta.textContent = item.contextLabel;
+
+        const badge = document.createElement("span");
+        badge.className = "entry-photo-library-badge";
+        if (item.isDraft) {
+            badge.classList.add("is-draft");
+        }
+        if (item.isMissing) {
+            badge.classList.add("is-missing");
+        }
+        badge.textContent = item.storageLabel;
+
+        copy.appendChild(name);
+        copy.appendChild(meta);
+        copy.appendChild(badge);
+
+        const openButton = document.createElement("button");
+        openButton.type = "button";
+        openButton.className = "saved-photo-open-button entry-photo-library-open";
+        openButton.setAttribute("data-reference-photo-open", "true");
+        openButton.setAttribute("data-reference-photo-name", item.name);
+        openButton.setAttribute("data-reference-photo-context", item.contextLabel);
+
+        if (item.photoId) {
+            openButton.setAttribute("data-reference-photo-id", item.photoId);
+        }
+
+        if (item.pendingId) {
+            openButton.setAttribute("data-reference-photo-pending-id", item.pendingId);
+        }
+
+        openButton.disabled = !item.canOpen;
+        openButton.textContent = item.canOpen ? "Open" : "Not In App";
+
+        row.appendChild(copy);
+        row.appendChild(openButton);
+        elements.referencePhotoLibraryList.appendChild(row);
+    });
+
+    if (labelOnlyCount > 0 && items.length > openableCount) {
+        const note = document.createElement("p");
+        note.className = "entry-photo-library-empty";
+        note.textContent = "Some older STP entries only kept the photo label. New photos now save into app storage and can open here directly.";
+        elements.referencePhotoLibraryList.appendChild(note);
+    }
+}
+
+function handleReferencePhotoLibraryClick(event) {
+    const openButton = event.target.closest("[data-reference-photo-open]");
+
+    if (!openButton) {
+        return;
+    }
+
+    openPhotoInReferencePanel({
+        photoName: openButton.getAttribute("data-reference-photo-name") || "Photo",
+        photoId: openButton.getAttribute("data-reference-photo-id") || "",
+        pendingId: openButton.getAttribute("data-reference-photo-pending-id") || "",
+        photoContext: openButton.getAttribute("data-reference-photo-context") || ""
+    });
+}
+
 function renderReferencePhoto() {
-    const hasPhoto = Boolean(state.referencePhoto);
+    const displayState = getReferencePhotoDisplayState();
+    const hasSavedReferencePhoto = Boolean(state.referencePhoto);
 
     if (elements.referencePhotoImg) {
         elements.referencePhotoImg.hidden = false;
-        elements.referencePhotoImg.src = hasPhoto ? state.referencePhoto : defaultReferencePhotoSrc;
+        elements.referencePhotoImg.src = displayState.source;
+        elements.referencePhotoImg.alt = displayState.alt;
     }
 
     if (elements.referencePhotoEmpty) {
@@ -5512,11 +5913,20 @@ function renderReferencePhoto() {
     }
 
     if (elements.clearReferencePhotoButton) {
-        elements.clearReferencePhotoButton.hidden = !hasPhoto;
+        elements.clearReferencePhotoButton.hidden = !hasSavedReferencePhoto;
+        elements.clearReferencePhotoButton.textContent = displayState.previewActive ? "Clear Saved Reference" : "Clear";
+    }
+
+    if (elements.closeReferencePhotoPreviewButton) {
+        elements.closeReferencePhotoPreviewButton.hidden = !displayState.previewActive;
+        elements.closeReferencePhotoPreviewButton.textContent = hasSavedReferencePhoto
+            ? "Back to Reference"
+            : "Close Preview";
     }
 
     if (elements.referencePhotoSavedHint) {
-        elements.referencePhotoSavedHint.hidden = !hasPhoto;
+        elements.referencePhotoSavedHint.hidden = !displayState.hint;
+        elements.referencePhotoSavedHint.textContent = displayState.hint || "Saved with session and project.";
     }
 
     updateImageStorageStatus();
@@ -5524,6 +5934,8 @@ function renderReferencePhoto() {
 }
 
 function clearReferencePhoto(showMessage) {
+    clearReferencePhotoPreview(false);
+
     const previousPhoto = state.referencePhoto;
     state.referencePhoto = "";
 
@@ -5636,6 +6048,7 @@ async function handleReferencePhotoUpload() {
 
     imagePayload = persistence.payload;
 
+    clearReferencePhotoPreview(false);
     renderReferencePhoto();
     if (imagePayload.wasResized) {
         setReferencePhotoMessage(
