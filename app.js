@@ -4538,7 +4538,11 @@ async function updateBackupDestinationStatus(options) {
     const summarySuffix = savedAtText ? " Last JSON save: " + savedAtText + "." : "";
 
     setBackupDestinationStatusMessage(
-        "App backup file: " + designatedJsonBackupFileName + "." + summarySuffix,
+        "App backup file: "
+            + designatedJsonBackupFileName
+            + "."
+            + summarySuffix
+            + " Use Import JSON Backup + Photos to load this file directly.",
         false
     );
 }
@@ -5146,7 +5150,174 @@ function handleImportCsvFile() {
     reader.readAsText(file);
 }
 
-function requestImportSessionFile() {
+async function importSessionBackupFromText(rawText, sourceLabel) {
+    const parsedData = JSON.parse(String(rawText || ""));
+    const backupPayload = extractSessionBackupPayload(parsedData);
+    let importedSession = normalizeImportedSession(backupPayload.sessionData);
+    const bundledPhotoCount = backupPayload.bundledPhotos.length;
+    let photoImportMessage = "";
+    let photoImportIsError = false;
+
+    if (!confirm(
+        bundledPhotoCount > 0
+            ? "Import this JSON backup and replace the current session? "
+                + String(bundledPhotoCount)
+                + " STP photo file(s) will also be restored."
+            : "Import this JSON backup and replace the current session?"
+    )) {
+        return {
+            imported: false,
+            cancelled: true
+        };
+    }
+
+    if (bundledPhotoCount > 0) {
+        const restoreResult = await restoreBundledPhotoEntries(backupPayload.bundledPhotos);
+
+        if (restoreResult.failedPhotoIds.length > 0) {
+            stripUnavailableImportedPhotoIds(importedSession, restoreResult.restoredPhotoIds);
+            photoImportIsError = true;
+        }
+
+        photoImportMessage = restoreResult.failedPhotoIds.length > 0
+            ? "Restored "
+                + String(restoreResult.restoredPhotoIds.length)
+                + " STP photo(s); "
+                + String(restoreResult.failedPhotoIds.length)
+                + " could not be restored."
+            : "Restored " + String(restoreResult.restoredPhotoIds.length) + " STP photo(s).";
+    } else {
+        const referencedPhotoCount = collectPhotoIdsFromStps(importedSession.stps).length;
+
+        if (referencedPhotoCount > 0) {
+            photoImportMessage = "Legacy JSON backup: STP photo labels imported, but this older backup does not include the actual STP photo files.";
+        }
+    }
+
+    if (backupPayload.missingPhotoIds.length > 0) {
+        photoImportMessage += (photoImportMessage ? " " : "")
+            + "Backup file was created with "
+            + String(backupPayload.missingPhotoIds.length)
+            + " STP photo(s) already missing from app storage.";
+        photoImportIsError = true;
+    }
+
+    const removedPhotoIds = collectPhotoIdsFromStps(state.stps);
+
+    state.siteName = importedSession.siteName;
+    state.siteLocation = importedSession.siteLocation;
+    state.depthUnit = importedSession.depthUnit;
+    state.stps = importedSession.stps;
+    state.projectImage = importedSession.projectImage;
+    state.referencePhoto = importedSession.referencePhoto;
+
+    if (!saveSession()) {
+        const importWarning = getDataSafetyAlertMessage("Imported session loaded.");
+        if (importWarning) {
+            alert(importWarning);
+        }
+
+        if (!dataSafetyState.lastCoreBackupSaveOk) {
+            return {
+                imported: false,
+                cancelled: false
+            };
+        }
+    }
+
+    populateSiteFields();
+    refreshParentStpOptions();
+    renderSavedStps();
+    renderProjectBanner();
+    renderReferencePhoto();
+    resetCurrentStp(false);
+    setProjectImageMessage("Imported session backup: " + (sourceLabel || "selected file"), false);
+    setReferencePhotoMessage(photoImportMessage, photoImportIsError);
+
+    try {
+        await cleanupDeletedPhotoIds(removedPhotoIds);
+    } catch (cleanupError) {
+        console.warn("Could not clean up replaced session photos.", cleanupError);
+    }
+
+    return {
+        imported: true,
+        cancelled: false
+    };
+}
+
+async function tryImportSessionFromDesignatedBackupFile() {
+    if (!supportsDesignatedBackupFile()) {
+        return {
+            handled: false,
+            imported: false
+        };
+    }
+
+    const siteSlug = buildFilenameBase() || "archaeolab-stp-export";
+    const storedHandle = await readStoredDesignatedJsonBackupHandle(siteSlug);
+    const fileHandle = storedHandle.fileHandle;
+
+    if (!fileHandle) {
+        return {
+            handled: false,
+            imported: false
+        };
+    }
+
+    try {
+        if (typeof fileHandle.queryPermission === "function") {
+            let permission = await fileHandle.queryPermission({ mode: "read" });
+
+            if (permission === "prompt" && typeof fileHandle.requestPermission === "function") {
+                permission = await fileHandle.requestPermission({ mode: "read" });
+            }
+
+            if (permission === "denied") {
+                return {
+                    handled: false,
+                    imported: false
+                };
+            }
+        }
+
+        const backupFile = await fileHandle.getFile();
+        const sourceLabel = normalizeTextValue(backupFile && backupFile.name)
+            || designatedJsonBackupFileName
+            || "designated app backup file";
+        const importResult = await importSessionBackupFromText(await backupFile.text(), sourceLabel);
+
+        if (importResult.imported) {
+            designatedJsonBackupFileName = sourceLabel;
+            await updateBackupDestinationStatus({
+                fileName: sourceLabel
+            });
+        }
+
+        return {
+            handled: true,
+            imported: importResult.imported
+        };
+    } catch (error) {
+        console.warn("Could not import from designated app backup file.", error);
+        return {
+            handled: false,
+            imported: false
+        };
+    }
+}
+
+async function requestImportSessionFile() {
+    const designatedImport = await tryImportSessionFromDesignatedBackupFile();
+
+    if (designatedImport.handled) {
+        return;
+    }
+
+    if (!elements.importJsonInput) {
+        return;
+    }
+
     elements.importJsonInput.value = "";
     elements.importJsonInput.click();
 }
@@ -5163,88 +5334,7 @@ function handleImportSessionFile() {
     reader.addEventListener("load", async function () {
         try {
             const rawText = String(reader.result || "");
-            const parsedData = JSON.parse(rawText);
-            const backupPayload = extractSessionBackupPayload(parsedData);
-            let importedSession = normalizeImportedSession(backupPayload.sessionData);
-            const bundledPhotoCount = backupPayload.bundledPhotos.length;
-            let photoImportMessage = "";
-            let photoImportIsError = false;
-
-            if (!confirm(
-                bundledPhotoCount > 0
-                    ? "Import this JSON backup and replace the current session? "
-                        + String(bundledPhotoCount)
-                        + " STP photo file(s) will also be restored."
-                    : "Import this JSON backup and replace the current session?"
-            )) {
-                return;
-            }
-
-            if (bundledPhotoCount > 0) {
-                const restoreResult = await restoreBundledPhotoEntries(backupPayload.bundledPhotos);
-
-                if (restoreResult.failedPhotoIds.length > 0) {
-                    stripUnavailableImportedPhotoIds(importedSession, restoreResult.restoredPhotoIds);
-                    photoImportIsError = true;
-                }
-
-                photoImportMessage = restoreResult.failedPhotoIds.length > 0
-                    ? "Restored "
-                        + String(restoreResult.restoredPhotoIds.length)
-                        + " STP photo(s); "
-                        + String(restoreResult.failedPhotoIds.length)
-                        + " could not be restored."
-                    : "Restored " + String(restoreResult.restoredPhotoIds.length) + " STP photo(s).";
-            } else {
-                const referencedPhotoCount = collectPhotoIdsFromStps(importedSession.stps).length;
-
-                if (referencedPhotoCount > 0) {
-                    photoImportMessage = "Legacy JSON backup: STP photo labels imported, but this older backup does not include the actual STP photo files.";
-                }
-            }
-
-            if (backupPayload.missingPhotoIds.length > 0) {
-                photoImportMessage += (photoImportMessage ? " " : "")
-                    + "Backup file was created with "
-                    + String(backupPayload.missingPhotoIds.length)
-                    + " STP photo(s) already missing from app storage.";
-                photoImportIsError = true;
-            }
-
-            const removedPhotoIds = collectPhotoIdsFromStps(state.stps);
-
-            state.siteName = importedSession.siteName;
-            state.siteLocation = importedSession.siteLocation;
-            state.depthUnit = importedSession.depthUnit;
-            state.stps = importedSession.stps;
-            state.projectImage = importedSession.projectImage;
-            state.referencePhoto = importedSession.referencePhoto;
-
-            if (!saveSession()) {
-                const importWarning = getDataSafetyAlertMessage("Imported session loaded.");
-                if (importWarning) {
-                    alert(importWarning);
-                }
-
-                if (!dataSafetyState.lastCoreBackupSaveOk) {
-                    return;
-                }
-            }
-
-            populateSiteFields();
-            refreshParentStpOptions();
-            renderSavedStps();
-            renderProjectBanner();
-            renderReferencePhoto();
-            resetCurrentStp(false);
-            setProjectImageMessage("Imported session backup: " + file.name, false);
-            setReferencePhotoMessage(photoImportMessage, photoImportIsError);
-
-            try {
-                await cleanupDeletedPhotoIds(removedPhotoIds);
-            } catch (cleanupError) {
-                console.warn("Could not clean up replaced session photos.", cleanupError);
-            }
+            await importSessionBackupFromText(rawText, file.name || "selected file");
         } catch (error) {
             console.warn("Could not import JSON backup.", error);
             alert("Could not import JSON backup. Confirm the file is a valid session export.");
