@@ -1516,7 +1516,15 @@ function focusFlowField(field, shouldReportValidity) {
         return false;
     }
 
-    field.scrollIntoView({ behavior: "smooth", block: "center" });
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const rect = field.getBoundingClientRect();
+    const minTopPadding = 72;
+    const minBottomPadding = 36;
+    const shouldScroll = rect.top < minTopPadding || rect.bottom > viewportHeight - minBottomPadding;
+
+    if (shouldScroll) {
+        field.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
 
     if (typeof field.focus === "function") {
         field.focus();
@@ -1935,7 +1943,15 @@ function focusFlowStepElement() {
         return;
     }
 
-    targetElement.scrollIntoView({ behavior: "smooth", block: "start" });
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const rect = targetElement.getBoundingClientRect();
+    const minTopPadding = 72;
+    const minBottomPadding = 36;
+    const shouldScroll = rect.top < minTopPadding || rect.bottom > viewportHeight - minBottomPadding;
+
+    if (shouldScroll) {
+        targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
 }
 
 function syncFlowNavigatorState(shouldScrollToActiveStep) {

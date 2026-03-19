@@ -17,6 +17,10 @@
     --error: #9f1b17;
 }
 
+html {
+    scrollbar-gutter: stable;
+}
+
 * {
     box-sizing: border-box;
 }
