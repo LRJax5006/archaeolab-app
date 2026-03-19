@@ -1,4 +1,4 @@
-const CACHE_NAME = "archaeolab-shell-v8";
+const CACHE_NAME = "archaeolab-shell-v9";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -11,7 +11,7 @@ const APP_SHELL = [
   "./icons/icon-512.png",
   "./icons/apple-touch-icon.png",
   "./IMG_3376.JPG",
-  "./banner - Archaeolab_files/Archaeology Trowel_orange to blk.jpg"
+  "./Archaeology Trowel_strip_yel to red.jpg"
 ];
 
 self.addEventListener("install", (event) => {
