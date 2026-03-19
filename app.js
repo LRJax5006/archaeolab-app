@@ -534,6 +534,7 @@ function cacheElements() {
     elements.activeStpSaveText = document.getElementById("activeStpSaveText");
     elements.topSaveStpButton = document.getElementById("topSaveStpButton");
     elements.topNewStpButton = document.getElementById("topNewStpButton");
+    elements.topNewStratumButton = document.getElementById("topNewStratumButton");
     elements.activeStpPhotoButton = document.getElementById("activeStpPhotoButton");
     elements.activeReferencePhotoButton = document.getElementById("activeReferencePhotoButton");
     elements.jumpToFormButton = document.getElementById("jumpToFormButton");
@@ -556,7 +557,7 @@ function cacheElements() {
 
 function bindEvents() {
     elements.addStratumButton.addEventListener("click", function () {
-        addStratumCard();
+        addStratumFromBarOrAction();
     });
 
     elements.saveStpButton.addEventListener("click", saveCurrentStp);
@@ -571,6 +572,12 @@ function bindEvents() {
     if (elements.topNewStpButton) {
         elements.topNewStpButton.addEventListener("click", function () {
             startNewStpFromCurrent();
+        });
+    }
+
+    if (elements.topNewStratumButton) {
+        elements.topNewStratumButton.addEventListener("click", function () {
+            addStratumFromBarOrAction();
         });
     }
 
@@ -2586,6 +2593,11 @@ function openStratumPhotoPicker(card, shouldScrollIntoView) {
         return false;
     }
 
+    if (elements.strataList && elements.strataList.contains(card)) {
+        lastTouchedStratumCard = card;
+        updateQuickPhotoControls();
+    }
+
     const cameraInput = card.querySelector('[data-field="cameraPhoto"]');
 
     if (!cameraInput) {
@@ -2620,14 +2632,14 @@ function updateQuickPhotoControls() {
     const hasCurrentPhotoTarget = Boolean(currentStratumCard && currentStratumCard.querySelector('[data-field="cameraPhoto"]'));
     const hasReferencePhotoTarget = Boolean(elements.referencePhotoInput);
     const currentStratumTitle = hasCurrentPhotoTarget
-        ? "Take photo for current stratum" + (currentStratumLabel ? " S" + currentStratumLabel : "")
+        ? "Take STP photo for current stratum" + (currentStratumLabel ? " S" + currentStratumLabel : "")
         : "No current stratum available";
     const stratumPhotoCount = currentStratumCard ? getCardPhotoEntries(currentStratumCard).length : 0;
     const hasReferencePhoto = Boolean(state.referencePhoto && state.referencePhoto.length > 0);
 
     if (elements.activeStpPhotoButton) {
         elements.activeStpPhotoButton.disabled = !hasCurrentPhotoTarget;
-        const barLabelText = currentStratumLabel ? "Stratum S" + currentStratumLabel : "Stratum Photo";
+        const barLabelText = "STP Photo";
         setButtonLabelWithChip(elements.activeStpPhotoButton, barLabelText, stratumPhotoCount > 0 ? stratumPhotoCount + "" : "");
         elements.activeStpPhotoButton.title = currentStratumTitle;
     }
@@ -2706,6 +2718,31 @@ function updateSaveActionLabels() {
     if (elements.topSaveStpButton) {
         elements.topSaveStpButton.textContent = saveLabel;
     }
+}
+
+function addStratumFromBarOrAction() {
+    if (!elements.strataList) {
+        return;
+    }
+
+    if (flowSteps.length > 0) {
+        setActiveFlowStep("strata", false);
+    }
+
+    addStratumCard();
+
+    const newCard = elements.strataList.firstElementChild;
+
+    if (!newCard) {
+        return;
+    }
+
+    lastTouchedStratumCard = newCard;
+
+    const depthField = newCard.querySelector('[data-field="depth"]');
+    const fallbackField = newCard.querySelector('[data-field="stratumLabel"]');
+
+    focusFlowField(depthField || fallbackField, false);
 }
 
 function setSaveButtonsDisabled(isDisabled) {
@@ -3210,6 +3247,13 @@ function renumberStrata() {
 }
 
 function handleStrataListClick(event) {
+    const clickedCard = event.target.closest(".stratum-card");
+
+    if (clickedCard) {
+        lastTouchedStratumCard = clickedCard;
+        updateQuickPhotoControls();
+    }
+
     const cameraButton = event.target.closest("[data-photo-capture]");
 
     if (cameraButton) {
