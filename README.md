@@ -1,6 +1,6 @@
-# Archaeolab - Archaeology Project Management
+# Crew Chief by Archaeolab
 
-Static web app for recording shovel test pits (STPs), strata, and exporting field-ready data.
+Static web app for recording shovel test pits (STPs), strata, crew details, and exporting field-ready data.
 
 ## Project Structure
 

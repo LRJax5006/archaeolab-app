@@ -1,7 +1,7 @@
 {
-  "name": "Archaeolab - Archaeology Project Management",
-  "short_name": "Archaeolab",
-  "description": "Record archaeology STPs, strata, GPS coordinates, and exports in a field-ready progressive web app.",
+  "name": "Crew Chief by Archaeolab",
+  "short_name": "Crew Chief",
+  "description": "Record archaeology STPs, strata, crew members, GPS coordinates, and exports in a field-ready progressive web app.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

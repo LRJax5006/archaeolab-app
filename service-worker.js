@@ -1,4 +1,4 @@
-const CACHE_NAME = "archaeolab-shell-v5";
+const CACHE_NAME = "archaeolab-shell-v6";
 const APP_SHELL = [
   "./",
   "./index.html",

@@ -6,8 +6,8 @@
     <meta name="theme-color" content="#b21e1e">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <meta name="apple-mobile-web-app-title" content="Archaeolab">
-    <title>Archaeolab - Archaeology Project Management</title>
+    <meta name="apple-mobile-web-app-title" content="Crew Chief">
+    <title>Crew Chief by Archaeolab</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
     <link rel="stylesheet" href="app.css">
@@ -33,7 +33,7 @@
     <div class="page-shell">
         <div id="pwaInstallBanner" class="pwa-install-banner" hidden>
             <div class="pwa-install-content">
-                <span class="pwa-install-text">Install Archaeolab on your device for offline use</span>
+                <span class="pwa-install-text">Install Crew Chief on your device for offline use</span>
             </div>
             <div class="pwa-install-actions">
                 <button type="button" id="pwaInstallButton" class="pwa-install-button">Install App</button>
@@ -66,8 +66,8 @@
 
         <header class="hero">
             <div>
-                <p class="eyebrow">Archaeolab App Prototype</p>
-                <h1>Archaeolab - Archaeology Project Management</h1>
+                <p class="eyebrow">by Archaeolab</p>
+                <h1>Crew Chief</h1>
                 <p class="intro">
                     Record site information once, then enter as many shovel test pits and strata as you need.
                     STP labels remain editable, even when a label suggestion is offered.
@@ -183,12 +183,18 @@
                                 <input type="text" id="siteLocation" name="siteLocation" placeholder="County, parcel, or project area" required>
                             </label>
 
+                            <label class="field field-wide">
+                                <span>Crew Members</span>
+                                <textarea id="crewMembers" name="crewMembers" rows="2" placeholder="Comma-separated names or one per line"></textarea>
+                                <p class="field-help">Remembered for the next site until you change it.</p>
+                            </label>
+
                             <label class="field">
                                 <span>Depth Measurement</span>
                                 <select id="depthUnit" name="depthUnit">
+                                    <option value="engineering-feet" selected>Engineering Feet</option>
                                     <option value="metric">Metric</option>
                                     <option value="standard">Standard</option>
-                                    <option value="engineering-feet">Engineering Feet</option>
                                 </select>
                             </label>
 
@@ -197,9 +203,25 @@
                                 <select id="stpEntryType" name="stpEntryType">
                                     <option value="base">Base STP</option>
                                     <option value="supplemental">Supplemental STP</option>
-                                    <option value="unit-id">Unit ID</option>
+                                    <option value="unit-id">Unit</option>
                                 </select>
                             </label>
+
+                            <div class="field" id="unitSizeField" hidden>
+                                <span>Unit Size</span>
+                                <select id="unitSizePreset" name="unitSizePreset" disabled>
+                                    <option value="">Select unit size</option>
+                                    <option value="2x2">2x2</option>
+                                    <option value="3x3">3x3</option>
+                                    <option value="4x4">4x4</option>
+                                    <option value="custom">Manual entry</option>
+                                </select>
+                                <div id="unitSizeCustomField" class="conditional-field" hidden>
+                                    <label for="unitSizeCustom">Manual Unit Size</label>
+                                    <input type="text" id="unitSizeCustom" name="unitSizeCustom" placeholder="ex: 5x5" disabled>
+                                </div>
+                                <p class="field-help">Choose a standard size or enter one manually.</p>
+                            </div>
 
                             <label class="field">
                                 <span>Parent Base STP</span>
@@ -252,7 +274,7 @@
                                     </select>
                                 </label>
 
-                                <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W. Use Unit ID for unit-based identifiers.</p>
+                                <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W. Use Unit for unit-based identifiers.</p>
                             </div>
                         </div>
 
@@ -341,7 +363,7 @@
                             <option value="all">All</option>
                             <option value="base">Base STP</option>
                             <option value="supplemental">Supplemental STP</option>
-                            <option value="unit-id">Unit ID</option>
+                            <option value="unit-id">Unit</option>
                         </select>
                     </label>
 
@@ -387,8 +409,8 @@
         <article class="stratum-card">
             <div class="stratum-card-head">
                 <div>
-                    <p class="stratum-kicker">Current STP</p>
-                    <h3 class="stratum-title">Stratum <span data-row-number></span></h3>
+                    <p class="stratum-kicker" data-stratum-kicker>STP</p>
+                    <h3 class="stratum-title">Stratum <span data-row-number></span> <span class="stratum-entry-label" data-stratum-entry-label></span></h3>
                 </div>
                 <button type="button" class="link-button" data-remove-stratum>Remove</button>
             </div>
@@ -406,7 +428,7 @@
 
                 <label class="field">
                     <span>Depth</span>
-                    <input type="text" data-field="depth" placeholder="20 cm" required>
+                    <input type="text" data-field="depth" placeholder="1.00 ft" required>
                 </label>
 
                 <label class="field">

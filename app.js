@@ -5,6 +5,7 @@ const contrastModeStorageKey = "archaeolab-contrast-mode-v1";
 const flowModeStorageKey = "archaeolab-flow-mode-v1";
 const fieldModeStorageKey = "archaeolab-field-mode-v1";
 const flowResumeStorageKey = "archaeolab-flow-resume-v1";
+const recentCrewMembersStorageKey = "archaeolab-recent-crew-members-v1";
 const importQualityModeStorageKey = "archaeolab-import-quality-mode-v1";
 const coreDataBackupStorageKey = "archaeolab-stp-core-backup-v1";
 const projectsCoreBackupStorageKey = "archaeolab-project-latest-core-backup-v1";
@@ -55,7 +56,9 @@ const importQualityProfiles = {
 const supportedProjectImageTypes = ["image/jpeg", "image/png", "image/webp"];
 const supportedProjectImageExtensions = [".jpg", ".jpeg", ".png", ".webp"];
 const validDepthUnits = ["metric", "standard", "engineering-feet"];
+const defaultDepthUnit = "engineering-feet";
 const validEntryTypes = ["base", "supplemental", "unit-id"];
+const validUnitSizePresets = ["2x2", "3x3", "4x4"];
 const photoDatabaseName = "archaeolab-stp-photos-v1";
 const photoDatabaseStore = "photos";
 const photoDatabaseVersion = 1;
@@ -338,7 +341,8 @@ const dropdownOptions = {
 const state = {
     siteName: "",
     siteLocation: "",
-    depthUnit: "metric",
+    crewMembers: "",
+    depthUnit: defaultDepthUnit,
     stps: [],
     projectImage: "",
     referencePhoto: ""
@@ -446,8 +450,13 @@ function cacheElements() {
     elements.entryForm = document.getElementById("entryForm");
     elements.siteName = document.getElementById("siteName");
     elements.siteLocation = document.getElementById("siteLocation");
+    elements.crewMembers = document.getElementById("crewMembers");
     elements.depthUnit = document.getElementById("depthUnit");
     elements.stpEntryType = document.getElementById("stpEntryType");
+    elements.unitSizeField = document.getElementById("unitSizeField");
+    elements.unitSizePreset = document.getElementById("unitSizePreset");
+    elements.unitSizeCustomField = document.getElementById("unitSizeCustomField");
+    elements.unitSizeCustom = document.getElementById("unitSizeCustom");
     elements.parentStp = document.getElementById("parentStp");
     elements.gpsLatitude = document.getElementById("gpsLatitude");
     elements.gpsLongitude = document.getElementById("gpsLongitude");
@@ -657,7 +666,24 @@ function bindEvents() {
 
     elements.siteName.addEventListener("input", updateSiteDraft);
     elements.siteLocation.addEventListener("input", updateSiteDraft);
+    if (elements.crewMembers) {
+        elements.crewMembers.addEventListener("input", updateSiteDraft);
+    }
     elements.depthUnit.addEventListener("change", updateSiteDraft);
+
+    if (elements.unitSizePreset) {
+        elements.unitSizePreset.addEventListener("change", function () {
+            updateUnitSizeUi();
+            updateActiveStpBar();
+            syncFlowNavigatorState(false);
+        });
+    }
+
+    if (elements.unitSizeCustom) {
+        elements.unitSizeCustom.addEventListener("input", function () {
+            syncFlowNavigatorState(false);
+        });
+    }
 
     if (elements.useCurrentGpsButton) {
         elements.useCurrentGpsButton.addEventListener("click", handleUseCurrentGps);
@@ -785,7 +811,46 @@ function normalizeTextValue(value) {
 
 function normalizeDepthUnitValue(value) {
     const normalized = normalizeTextValue(value).toLowerCase();
-    return validDepthUnits.includes(normalized) ? normalized : "metric";
+    return validDepthUnits.includes(normalized) ? normalized : defaultDepthUnit;
+}
+
+function normalizeUnitSizeValue(value) {
+    const normalized = normalizeTextValue(value);
+
+    if (!normalized) {
+        return "";
+    }
+
+    const compactMatch = normalized.match(/^(\d+)\s*[xX]\s*(\d+)$/);
+
+    if (compactMatch) {
+        return compactMatch[1] + "x" + compactMatch[2];
+    }
+
+    return normalized;
+}
+
+function loadRecentCrewMembers() {
+    try {
+        return normalizeTextValue(localStorage.getItem(recentCrewMembersStorageKey));
+    } catch (error) {
+        console.warn("Could not load recent crew members.", error);
+        return "";
+    }
+}
+
+function persistRecentCrewMembers(value) {
+    const normalizedValue = normalizeTextValue(value);
+
+    try {
+        if (normalizedValue) {
+            localStorage.setItem(recentCrewMembersStorageKey, normalizedValue);
+        } else {
+            localStorage.removeItem(recentCrewMembersStorageKey);
+        }
+    } catch (error) {
+        console.warn("Could not save recent crew members.", error);
+    }
 }
 
 function normalizeEntryTypeValue(value) {
@@ -843,9 +908,11 @@ function normalizeImportedStp(stp, defaults) {
     return {
         siteName: normalizeTextValue(rawStp.siteName || defaults.siteName),
         siteLocation: normalizeTextValue(rawStp.siteLocation || defaults.siteLocation),
+        crewMembers: normalizeTextValue(rawStp.crewMembers || defaults.crewMembers),
         depthUnit: normalizeDepthUnitValue(rawStp.depthUnit || defaults.depthUnit),
         stpLabel: normalizeTextValue(rawStp.stpLabel),
         entryType: entryType,
+        unitSize: entryType === "unit-id" ? normalizeUnitSizeValue(rawStp.unitSize) : "",
         parentStp: parentStp,
         supDirection: supDirection,
         gpsLatitude: normalizeTextValue(rawStp.gpsLatitude),
@@ -859,16 +926,19 @@ function normalizeImportedSession(sessionData) {
     const rawSession = sessionData && typeof sessionData === "object" ? sessionData : {};
     const siteName = normalizeTextValue(rawSession.siteName);
     const siteLocation = normalizeTextValue(rawSession.siteLocation);
+    const crewMembers = normalizeTextValue(rawSession.crewMembers);
     const depthUnit = normalizeDepthUnitValue(rawSession.depthUnit);
     const defaults = {
         siteName: siteName,
         siteLocation: siteLocation,
+        crewMembers: crewMembers,
         depthUnit: depthUnit
     };
 
     return {
         siteName: siteName,
         siteLocation: siteLocation,
+        crewMembers: crewMembers,
         depthUnit: depthUnit,
         stps: (Array.isArray(rawSession.stps) ? rawSession.stps : []).map(function (stp) {
             return normalizeImportedStp(stp, defaults);
@@ -884,10 +954,12 @@ function normalizeImportedProject(projectData, fallbackId) {
     const rawProject = projectData && typeof projectData === "object" ? projectData : {};
     const siteName = normalizeTextValue(rawProject.siteName);
     const siteLocation = normalizeTextValue(rawProject.siteLocation);
+    const crewMembers = normalizeTextValue(rawProject.crewMembers);
     const depthUnit = normalizeDepthUnitValue(rawProject.depthUnit);
     const defaults = {
         siteName: siteName,
         siteLocation: siteLocation,
+        crewMembers: crewMembers,
         depthUnit: depthUnit
     };
 
@@ -897,6 +969,7 @@ function normalizeImportedProject(projectData, fallbackId) {
         savedAt: normalizeTextValue(rawProject.savedAt) || new Date().toISOString(),
         siteName: siteName,
         siteLocation: siteLocation,
+        crewMembers: crewMembers,
         depthUnit: depthUnit,
         stps: (Array.isArray(rawProject.stps) ? rawProject.stps : []).map(function (stp) {
             return normalizeImportedStp(stp, defaults);
@@ -949,6 +1022,7 @@ function buildCoreProjectBackupPayload(project) {
             savedAt: normalizedProject.savedAt,
             siteName: normalizedProject.siteName,
             siteLocation: normalizedProject.siteLocation,
+            crewMembers: normalizedProject.crewMembers,
             depthUnit: normalizedProject.depthUnit,
             stps: normalizedProject.stps,
             projectImage: "",
@@ -1517,6 +1591,16 @@ function getSiteFlowStepValidation() {
         };
     }
 
+    if (entryType === "unit-id" && !getUnitSizeValueFromForm()) {
+        return {
+            complete: false,
+            message: "Choose or enter a unit size before moving forward.",
+            focusField: normalizeTextValue(elements.unitSizePreset && elements.unitSizePreset.value) === "custom"
+                ? elements.unitSizeCustom
+                : elements.unitSizePreset
+        };
+    }
+
     return {
         complete: true,
         message: "",
@@ -1525,9 +1609,7 @@ function getSiteFlowStepValidation() {
 }
 
 function getStrataFlowStepValidation() {
-    const cards = elements.strataList
-        ? Array.from(elements.strataList.querySelectorAll(".stratum-card"))
-        : [];
+    const cards = getMeaningfulStratumCards();
     const requiredFieldDetails = [
         {
             fieldName: "stratumLabel",
@@ -1554,7 +1636,7 @@ function getStrataFlowStepValidation() {
     if (cards.length === 0) {
         return {
             complete: false,
-            message: "Add at least one stratum before moving forward.",
+            message: "Fill at least one stratum before moving forward.",
             focusField: elements.addStratumButton || null
         };
     }
@@ -1992,7 +2074,15 @@ function handleFlowStepSelectionChange() {
         return;
     }
 
-    attemptFlowStepNavigation(elements.flowStepSelect.value, true);
+    const targetStepId = normalizeSearchToken(elements.flowStepSelect.value);
+
+    if (targetStepId === "saved" || targetStepId === "wrap") {
+        flowValidationMessage = "";
+        setActiveFlowStep(targetStepId, true);
+        return;
+    }
+
+    attemptFlowStepNavigation(targetStepId, true);
 }
 
 function handleFlowStepPrevious() {
@@ -2029,7 +2119,17 @@ function handleFlowStepNext() {
         return;
     }
 
-    attemptFlowStepNavigation(availableSteps[currentIndex + 1].id, true);
+    const nextStepId = availableSteps[currentIndex + 1].id;
+    const movingFromStrataToReview = activeFlowStepId === "strata"
+        && (nextStepId === "saved" || nextStepId === "wrap");
+
+    if (movingFromStrataToReview && getMeaningfulStratumCards().length === 0) {
+        flowValidationMessage = "";
+        setActiveFlowStep(nextStepId, true);
+        return;
+    }
+
+    attemptFlowStepNavigation(nextStepId, true);
 }
 
 function handleFlowToggle() {
@@ -2044,6 +2144,13 @@ function handleFlowProgressRailClick(event) {
     }
 
     const targetStepId = normalizeSearchToken(button.getAttribute("data-flow-step-target"));
+
+    if (targetStepId === "saved" || targetStepId === "wrap") {
+        flowValidationMessage = "";
+        setActiveFlowStep(targetStepId, true);
+        return;
+    }
+
     attemptFlowStepNavigation(targetStepId, true);
 }
 
@@ -2307,6 +2414,8 @@ function matchesSavedStpFilters(stp, searchTerm, typeFilter) {
         stp.stpLabel,
         stp.siteName,
         stp.siteLocation,
+        stp.crewMembers,
+        stp.unitSize,
         stp.parentStp,
         stp.supDirection,
         normalizedType,
@@ -2324,15 +2433,20 @@ function getEntryTypeLabel(entryType) {
     }
 
     if (normalizedType === "unit-id") {
-        return "Unit ID";
+        return "Unit";
     }
 
     return "Base STP";
 }
 
+function getEntryRecordLabel(entryType) {
+    return normalizeEntryTypeValue(entryType) === "unit-id" ? "Unit" : "STP";
+}
+
 function applyNormalizedSessionToState(normalizedSession) {
     state.siteName = normalizedSession.siteName;
     state.siteLocation = normalizedSession.siteLocation;
+    state.crewMembers = normalizeTextValue(normalizedSession.crewMembers);
     state.depthUnit = normalizedSession.depthUnit;
     state.stps = normalizedSession.stps;
     state.projectImage = normalizedSession.projectImage;
@@ -2363,9 +2477,11 @@ function buildCoreDataBackupPayloadFromState(sourceState) {
         return {
             siteName: normalizeTextValue(stp && stp.siteName),
             siteLocation: normalizeTextValue(stp && stp.siteLocation),
+            crewMembers: normalizeTextValue((stp && stp.crewMembers) || sourceState.crewMembers),
             depthUnit: normalizeDepthUnitValue(stp && stp.depthUnit),
             stpLabel: normalizeTextValue(stp && stp.stpLabel),
             entryType: normalizeEntryTypeValue(stp && stp.entryType),
+            unitSize: normalizeUnitSizeValue(stp && stp.unitSize),
             parentStp: normalizeTextValue(stp && stp.parentStp),
             supDirection: normalizeSupDirectionValue(stp && stp.supDirection),
             gpsLatitude: normalizeTextValue(stp && stp.gpsLatitude),
@@ -2378,6 +2494,7 @@ function buildCoreDataBackupPayloadFromState(sourceState) {
     return {
         siteName: normalizeTextValue(sourceState.siteName),
         siteLocation: normalizeTextValue(sourceState.siteLocation),
+        crewMembers: normalizeTextValue(sourceState.crewMembers),
         depthUnit: normalizeDepthUnitValue(sourceState.depthUnit),
         stps: safeStps,
         projectImage: "",
@@ -2582,8 +2699,9 @@ function updateActiveStpBar() {
     }
 
     const siteName = state.siteName || "";
+    const entryRecordLabel = getEntryRecordLabel(elements.stpEntryType && elements.stpEntryType.value);
     const rawLabel = elements.stpLabel ? elements.stpLabel.value.trim() : "";
-    const label = rawLabel || "New STP";
+    const label = rawLabel || (entryRecordLabel === "Unit" ? "New Unit" : "New STP");
     const stratumCount = elements.strataList
         ? elements.strataList.querySelectorAll(".stratum-card").length
         : 0;
@@ -2597,7 +2715,7 @@ function updateActiveStpBar() {
         elements.activeStpSepEl.hidden = !siteName;
     }
 
-    elements.activeStpLblEl.textContent = "STP " + label;
+    elements.activeStpLblEl.textContent = entryRecordLabel + " " + label;
 
     if (elements.activeStpStratumCountEl) {
         elements.activeStpStratumCountEl.textContent = stratumCount > 0
@@ -2624,6 +2742,7 @@ function updateActiveStpBar() {
             : (saveOk ? "Saved" : "Save issue");
     }
 
+    updateCurrentStratumContextLabels();
     updateQuickPhotoControls();
 }
 
@@ -2829,20 +2948,30 @@ function saveSession() {
 }
 
 function populateSiteFields() {
+    const preferredCrewMembers = normalizeTextValue(state.crewMembers) || loadRecentCrewMembers();
+
+    state.crewMembers = preferredCrewMembers;
     elements.siteName.value = state.siteName;
     elements.siteLocation.value = state.siteLocation;
+    if (elements.crewMembers) {
+        elements.crewMembers.value = preferredCrewMembers;
+    }
     elements.depthUnit.value = state.depthUnit;
+    persistRecentCrewMembers(preferredCrewMembers);
     applyDepthUnitUi();
 }
 
 function updateSiteDraft() {
     state.siteName = elements.siteName.value.trim();
     state.siteLocation = elements.siteLocation.value.trim();
+    state.crewMembers = elements.crewMembers ? elements.crewMembers.value.trim() : "";
     state.depthUnit = elements.depthUnit.value;
+    persistRecentCrewMembers(state.crewMembers);
     applyDepthUnitUi();
     refreshPhotoRulesAll();
     saveSession();
     updateActiveStpBar();
+    syncFlowNavigatorState(false);
 }
 
 function getSavedStpDisplayLabel(stp) {
@@ -3029,6 +3158,7 @@ function addStratumCard(defaults) {
     renumberStrata();
     applyDepthUnitUi();
     updatePhotoRuleForCard(newCard);
+    updateCurrentStratumContextLabels();
     refreshStratumSuggestionsAll();
     updateActiveStpBar();
 }
@@ -3051,6 +3181,7 @@ function renumberStrata() {
     });
 
     refreshPhotoRulesAll();
+    updateCurrentStratumContextLabels();
 }
 
 function handleStrataListClick(event) {
@@ -3422,6 +3553,16 @@ function buildAutoPhotoName(prefix, sequence, fileName) {
     return prefix + "_" + numberToken + getFileExtension(fileName);
 }
 
+function getDepthPlaceholderForUnit(unit) {
+    const placeholderMap = {
+        metric: "20 cm",
+        standard: "8 in",
+        "engineering-feet": "1.00 ft"
+    };
+
+    return placeholderMap[normalizeDepthUnitValue(unit)] || placeholderMap[defaultDepthUnit];
+}
+
 function setDepthFieldValidity(field) {
     if (!field) {
         return true;
@@ -3430,7 +3571,7 @@ function setDepthFieldValidity(field) {
     const depthValue = normalizeTextValue(field.value);
 
     if (!depthValue) {
-        field.setCustomValidity("Enter a depth value like 20 cm.");
+        field.setCustomValidity("Enter a depth value like " + getDepthPlaceholderForUnit(elements.depthUnit && elements.depthUnit.value) + ".");
         return false;
     }
 
@@ -3439,7 +3580,9 @@ function setDepthFieldValidity(field) {
 }
 
 function validateAllDepthFields() {
-    const depthFields = Array.from(elements.strataList.querySelectorAll('[data-field="depth"]'));
+    const depthFields = getMeaningfulStratumCards().map(function (card) {
+        return card.querySelector('[data-field="depth"]');
+    }).filter(Boolean);
     let firstInvalidField = null;
 
     depthFields.forEach(function (field) {
@@ -3510,6 +3653,109 @@ function getDisplayStpLabelFromForm() {
     return label;
 }
 
+function getCurrentDraftEntryText() {
+    const entryRecordLabel = getEntryRecordLabel(elements.stpEntryType && elements.stpEntryType.value);
+    const rawLabel = normalizeTextValue(elements.stpLabel && elements.stpLabel.value);
+
+    if (!rawLabel) {
+        return entryRecordLabel;
+    }
+
+    return entryRecordLabel + " " + getDisplayStpLabelFromForm();
+}
+
+function updateCurrentStratumContextLabels() {
+    if (!elements.strataList) {
+        return;
+    }
+
+    const entryText = getCurrentDraftEntryText();
+
+    elements.strataList.querySelectorAll(".stratum-card").forEach(function (card) {
+        const kicker = card.querySelector("[data-stratum-kicker]");
+        const titleLabel = card.querySelector("[data-stratum-entry-label]");
+
+        if (kicker) {
+            kicker.textContent = entryText;
+        }
+
+        if (titleLabel) {
+            titleLabel.textContent = "";
+        }
+    });
+}
+
+function getUnitSizeValueFromForm() {
+    if (normalizeEntryTypeValue(elements.stpEntryType && elements.stpEntryType.value) !== "unit-id") {
+        return "";
+    }
+
+    const presetValue = normalizeTextValue(elements.unitSizePreset && elements.unitSizePreset.value).toLowerCase();
+
+    if (presetValue && presetValue !== "custom") {
+        return normalizeUnitSizeValue(presetValue);
+    }
+
+    return normalizeUnitSizeValue(elements.unitSizeCustom && elements.unitSizeCustom.value);
+}
+
+function setUnitSizeFormValue(value) {
+    if (!elements.unitSizePreset || !elements.unitSizeCustom) {
+        return;
+    }
+
+    const normalizedValue = normalizeUnitSizeValue(value);
+
+    if (!normalizedValue) {
+        elements.unitSizePreset.value = "";
+        elements.unitSizeCustom.value = "";
+        updateUnitSizeUi();
+        return;
+    }
+
+    if (validUnitSizePresets.includes(normalizedValue)) {
+        elements.unitSizePreset.value = normalizedValue;
+        elements.unitSizeCustom.value = "";
+    } else {
+        elements.unitSizePreset.value = "custom";
+        elements.unitSizeCustom.value = normalizedValue;
+    }
+
+    updateUnitSizeUi();
+}
+
+function updateUnitSizeUi() {
+    const isUnitId = normalizeEntryTypeValue(elements.stpEntryType && elements.stpEntryType.value) === "unit-id";
+    const presetValue = normalizeTextValue(elements.unitSizePreset && elements.unitSizePreset.value).toLowerCase();
+    const showCustomField = isUnitId && presetValue === "custom";
+
+    if (elements.unitSizeField) {
+        elements.unitSizeField.hidden = !isUnitId;
+    }
+
+    if (elements.unitSizePreset) {
+        elements.unitSizePreset.disabled = !isUnitId;
+        elements.unitSizePreset.required = isUnitId;
+
+        if (!isUnitId) {
+            elements.unitSizePreset.value = "";
+        }
+    }
+
+    if (elements.unitSizeCustomField) {
+        elements.unitSizeCustomField.hidden = !showCustomField;
+    }
+
+    if (elements.unitSizeCustom) {
+        elements.unitSizeCustom.disabled = !showCustomField;
+        elements.unitSizeCustom.required = showCustomField;
+
+        if (!isUnitId) {
+            elements.unitSizeCustom.value = "";
+        }
+    }
+}
+
 function buildPhotoPrefix(stratumLabel) {
     const siteToken = sanitizeToken(elements.siteName.value) || "SITE";
     const stpToken = sanitizeToken(getDisplayStpLabelFromForm()) || "STP";
@@ -3553,6 +3799,66 @@ function updatePhotoRuleForCard(card) {
 
     validatePhotoNamesForCard(card);
     renderPhotoListForCard(card);
+}
+
+function isStratumCardEmpty(card) {
+    if (!card) {
+        return true;
+    }
+
+    const hasFieldContent = ["depth", "munsell", "soilType", "horizon", "artifactCatalog", "artifactSummary", "notes"]
+        .some(function (fieldName) {
+            const field = card.querySelector('[data-field="' + fieldName + '"]');
+            return Boolean(normalizeTextValue(field && field.value));
+        });
+
+    return !hasFieldContent && getCardPhotoEntries(card).length === 0;
+}
+
+function getMeaningfulStratumCards() {
+    if (!elements.strataList) {
+        return [];
+    }
+
+    return Array.from(elements.strataList.querySelectorAll(".stratum-card")).filter(function (card) {
+        return !isStratumCardEmpty(card);
+    });
+}
+
+function withEmptyStrataTemporarilyExcluded(callback) {
+    const emptyCards = elements.strataList
+        ? Array.from(elements.strataList.querySelectorAll(".stratum-card")).filter(isStratumCardEmpty)
+        : [];
+    const previousStates = [];
+
+    emptyCards.forEach(function (card) {
+        card.querySelectorAll("input, select, textarea").forEach(function (field) {
+            previousStates.push({
+                field: field,
+                disabled: field.disabled,
+                required: "required" in field ? field.required : null
+            });
+
+            field.disabled = true;
+            if ("required" in field) {
+                field.required = false;
+            }
+            if (typeof field.setCustomValidity === "function") {
+                field.setCustomValidity("");
+            }
+        });
+    });
+
+    try {
+        return callback();
+    } finally {
+        previousStates.forEach(function (entry) {
+            entry.field.disabled = entry.disabled;
+            if (entry.required !== null) {
+                entry.field.required = entry.required;
+            }
+        });
+    }
 }
 
 function refreshPhotoRulesAll() {
@@ -4404,6 +4710,7 @@ function refreshParentStpOptions() {
 
 function updateStpTypeUi() {
     const isSupplemental = elements.stpEntryType.value === "supplemental";
+    const isUnitId = elements.stpEntryType.value === "unit-id";
 
     elements.parentStp.disabled = !isSupplemental;
     elements.parentStp.required = isSupplemental;
@@ -4413,6 +4720,12 @@ function updateStpTypeUi() {
     if (!isSupplemental) {
         elements.parentStp.value = "";
         elements.supDirection.value = "";
+    }
+
+    if (!isUnitId) {
+        setUnitSizeFormValue("");
+    } else {
+        updateUnitSizeUi();
     }
 }
 
@@ -4665,6 +4978,7 @@ function reopenSavedStp(stpIndex) {
 
     state.siteName = normalizeTextValue(stp.siteName || state.siteName);
     state.siteLocation = normalizeTextValue(stp.siteLocation || state.siteLocation);
+    state.crewMembers = normalizeTextValue(stp.crewMembers || state.crewMembers);
     state.depthUnit = normalizeDepthUnitValue(stp.depthUnit || state.depthUnit);
 
     populateSiteFields();
@@ -4678,6 +4992,8 @@ function reopenSavedStp(stpIndex) {
         elements.parentStp.value = normalizeTextValue(stp.parentStp);
         elements.supDirection.value = normalizeSupDirectionValue(stp.supDirection);
     }
+
+    setUnitSizeFormValue(stp.unitSize);
 
     elements.stpLabel.value = normalizeTextValue(stp.stpLabel);
     elements.gpsLatitude.value = normalizeTextValue(stp.gpsLatitude);
@@ -4701,17 +5017,22 @@ async function saveCurrentStp() {
     const editingIndex = isEditingSavedStp() ? activeEditStpIndex : -1;
     const isEditing = editingIndex >= 0;
 
-    const depthValidation = validateAllDepthFields();
-    if (!depthValidation.valid) {
-        if (depthValidation.firstInvalidField) {
-            depthValidation.firstInvalidField.focus();
+    const formIsValid = withEmptyStrataTemporarilyExcluded(function () {
+        const depthValidation = validateAllDepthFields();
+
+        if (!depthValidation.valid) {
+            if (depthValidation.firstInvalidField) {
+                depthValidation.firstInvalidField.focus();
+            }
+
+            elements.entryForm.reportValidity();
+            return false;
         }
 
-        elements.entryForm.reportValidity();
-        return;
-    }
+        return elements.entryForm.reportValidity();
+    });
 
-    if (!elements.entryForm.reportValidity()) {
+    if (!formIsValid) {
         return;
     }
 
@@ -4804,7 +5125,7 @@ async function saveCurrentStp() {
 
 async function collectCurrentStp() {
     const strata = [];
-    const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+    const cards = getMeaningfulStratumCards();
 
     for (const card of cards) {
         const persistedPhotoEntries = await persistCardPhotoEntries(card);
@@ -4842,9 +5163,11 @@ async function collectCurrentStp() {
     return {
         siteName: state.siteName,
         siteLocation: state.siteLocation,
+        crewMembers: state.crewMembers,
         depthUnit: state.depthUnit,
         stpLabel: elements.stpLabel.value.trim(),
         entryType: elements.stpEntryType.value,
+        unitSize: getUnitSizeValueFromForm(),
         parentStp: elements.parentStp.value,
         supDirection: elements.supDirection.value,
         gpsLatitude: elements.gpsLatitude.value.trim(),
@@ -4856,7 +5179,7 @@ async function collectCurrentStp() {
 
 function collectCurrentStpWithoutPhotoPersistence() {
     const strata = [];
-    const cards = Array.from(elements.strataList.querySelectorAll(".stratum-card"));
+    const cards = getMeaningfulStratumCards();
 
     cards.forEach(function (card) {
         const photoNames = getCardPhotoEntries(card).map(function (entry) {
@@ -4884,9 +5207,11 @@ function collectCurrentStpWithoutPhotoPersistence() {
     return {
         siteName: state.siteName,
         siteLocation: state.siteLocation,
+        crewMembers: state.crewMembers,
         depthUnit: state.depthUnit,
         stpLabel: elements.stpLabel.value.trim(),
         entryType: elements.stpEntryType.value,
+        unitSize: getUnitSizeValueFromForm(),
         parentStp: elements.parentStp.value,
         supDirection: elements.supDirection.value,
         gpsLatitude: elements.gpsLatitude.value.trim(),
@@ -4939,12 +5264,13 @@ function renderSavedStps() {
         card.className = "saved-stp";
 
         const stpIndex = state.stps.indexOf(stp);
+        const entryRecordLabel = getEntryRecordLabel(stp.entryType);
         const titleRow = document.createElement("div");
         titleRow.className = "saved-stp-title-row";
 
         const title = document.createElement("h3");
         title.className = "saved-stp-title";
-        setHighlightedText(title, "STP " + stp.stpLabel, searchTerm);
+        setHighlightedText(title, entryRecordLabel + " " + stp.stpLabel, searchTerm);
         titleRow.appendChild(title);
 
         const titleActions = document.createElement("div");
@@ -4981,13 +5307,15 @@ function renderSavedStps() {
 
         addStpField("Site", stp.siteName);
         addStpField("Location", stp.siteLocation);
+        addStpField("Crew", stp.crewMembers);
         addStpField("Type", getEntryTypeLabel(stp.entryType));
+        addStpField("Unit Size", stp.unitSize);
         if (stp.parentStp) { addStpField("Parent STP", stp.parentStp); }
         if (stp.supDirection) { addStpField("Sup Direction", stp.supDirection); }
         if (stp.gpsLatitude || stp.gpsLongitude) {
             addStpField("GPS", (stp.gpsLatitude || "-") + ", " + (stp.gpsLongitude || "-"));
         }
-        addStpField("Depth Unit", stp.depthUnit || "metric");
+        addStpField("Depth Unit", stp.depthUnit || defaultDepthUnit);
         card.appendChild(stpInfo);
 
         const strataContainer = document.createElement("div");
@@ -5090,6 +5418,7 @@ function suggestFromCurrentInput() {
 
     elements.stpLabel.value = suggestion;
     refreshPhotoRulesAll();
+    updateActiveStpBar();
 }
 
 function suggestNextStpLabel(label) {
@@ -5111,14 +5440,9 @@ function suggestNextStpLabel(label) {
 
 function applyDepthUnitUi() {
     const unit = elements.depthUnit.value;
-    const placeholderMap = {
-        metric: "20 cm",
-        standard: "8 in",
-        "engineering-feet": "1.00 ft"
-    };
 
     elements.strataList.querySelectorAll('[data-field="depth"]').forEach(function (field) {
-        field.placeholder = placeholderMap[unit] || "20 cm";
+        field.placeholder = getDepthPlaceholderForUnit(unit);
     });
 }
 
@@ -5234,8 +5558,10 @@ function buildFlatExportRows() {
                 "Photo Names": photoNames,
                 "Site Name": stp.siteName,
                 "Site Location": stp.siteLocation,
-                "Depth Unit": stp.depthUnit || "metric",
+                "Crew Members": stp.crewMembers || "",
+                "Depth Unit": stp.depthUnit || defaultDepthUnit,
                 "STP Entry Type": stp.entryType || "base",
+                "Unit Size": stp.unitSize || "",
                 "Parent STP": stp.parentStp || "",
                 "Recorded STP Label": stp.stpLabel || "",
                 "GPS Latitude": stp.gpsLatitude || "",
@@ -5264,8 +5590,10 @@ function getExportHeaders() {
         "Photo Names",
         "Site Name",
         "Site Location",
+        "Crew Members",
         "Depth Unit",
         "STP Entry Type",
+        "Unit Size",
         "Parent STP",
         "Recorded STP Label",
         "GPS Latitude",
@@ -5274,10 +5602,12 @@ function getExportHeaders() {
 }
 
 function buildFilenameBase() {
-    return (state.siteName || "archaeolab-stp-export")
+    const base = (state.siteName || "crew-chief-export")
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
+
+    return base || "crew-chief-export";
 }
 
 function downloadExcelReadyXlsx() {
@@ -5359,10 +5689,12 @@ function supportsDesignatedBackupFile() {
 }
 
 function buildSessionBackupFilenameBase() {
-    return (state.siteName || "archaeolab-stp-session")
+    const base = (state.siteName || "crew-chief-session")
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
+
+    return base || "crew-chief-session";
 }
 
 function buildJsonBackupHandleLegacyKey(siteSlug) {
@@ -5896,14 +6228,19 @@ function buildSessionFromCsvRows(csvRows) {
     const stpMap = new Map();
     let sessionSiteName = "";
     let sessionSiteLocation = "";
-    let sessionDepthUnit = "metric";
+    let sessionCrewMembers = "";
+    let sessionDepthUnit = defaultDepthUnit;
 
     rows.forEach(function (row, rowIndex) {
         const siteName = getCsvRowValue(row, ["Site Name", "Site"]);
         const siteLocation = getCsvRowValue(row, ["Site Location", "Location"]);
+        const crewMembers = getCsvRowValue(row, ["Crew Members", "Crew"]);
         const depthUnitToken = getCsvRowValue(row, ["Depth Unit"]);
         const depthUnit = normalizeDepthUnitValue(depthUnitToken || sessionDepthUnit);
         const entryType = normalizeEntryTypeValue(getCsvRowValue(row, ["STP Entry Type", "Entry Type"]) || "base");
+        const unitSize = entryType === "unit-id"
+            ? normalizeUnitSizeValue(getCsvRowValue(row, ["Unit Size"]))
+            : "";
         const parentStp = entryType === "supplemental"
             ? getCsvRowValue(row, ["Parent STP"])
             : "";
@@ -5927,18 +6264,25 @@ function buildSessionFromCsvRows(csvRows) {
             sessionSiteLocation = siteLocation;
         }
 
+        if (!sessionCrewMembers && crewMembers) {
+            sessionCrewMembers = crewMembers;
+        }
+
         if (depthUnitToken) {
             sessionDepthUnit = depthUnit;
         }
 
         const resolvedSiteName = siteName || sessionSiteName;
         const resolvedSiteLocation = siteLocation || sessionSiteLocation;
+        const resolvedCrewMembers = crewMembers || sessionCrewMembers;
 
         const stpKey = [
             resolvedSiteName,
             resolvedSiteLocation,
+            resolvedCrewMembers,
             depthUnit,
             entryType,
+            unitSize,
             parentStp,
             supDirection,
             stpLabel,
@@ -5950,9 +6294,11 @@ function buildSessionFromCsvRows(csvRows) {
             stpMap.set(stpKey, {
                 siteName: resolvedSiteName,
                 siteLocation: resolvedSiteLocation,
+                crewMembers: resolvedCrewMembers,
                 depthUnit: depthUnit,
                 stpLabel: stpLabel,
                 entryType: entryType,
+                unitSize: unitSize,
                 parentStp: parentStp,
                 supDirection: supDirection,
                 gpsLatitude: gpsLatitude,
@@ -6008,7 +6354,8 @@ function buildSessionFromCsvRows(csvRows) {
     return normalizeImportedSession({
         siteName: sessionSiteName || importedStps[0].siteName,
         siteLocation: sessionSiteLocation || importedStps[0].siteLocation,
-        depthUnit: sessionDepthUnit || "metric",
+        crewMembers: sessionCrewMembers || importedStps[0].crewMembers,
+        depthUnit: sessionDepthUnit || defaultDepthUnit,
         stps: importedStps,
         projectImage: "",
         referencePhoto: ""
@@ -6078,7 +6425,7 @@ function handleImportCsvFile() {
             }
         } catch (error) {
             console.warn("Could not import CSV backup.", error);
-            alert("Could not import CSV backup. Confirm the file matches the Archaeolab CSV export format.");
+            alert("Could not import CSV backup. Confirm the file matches the Crew Chief CSV export format.");
         } finally {
             elements.importCsvInput.value = "";
         }
@@ -6302,7 +6649,8 @@ async function clearSession() {
 
     state.siteName = "";
     state.siteLocation = "";
-    state.depthUnit = "metric";
+    state.crewMembers = loadRecentCrewMembers();
+    state.depthUnit = defaultDepthUnit;
     state.stps = [];
     state.projectImage = "";
     state.referencePhoto = "";
@@ -6553,6 +6901,7 @@ function saveProjectAndStartNew() {
         savedAt: new Date().toISOString(),
         siteName: state.siteName,
         siteLocation: state.siteLocation,
+        crewMembers: state.crewMembers,
         depthUnit: state.depthUnit,
         stps: state.stps,
         projectImage: state.projectImage,
@@ -6568,7 +6917,8 @@ function saveProjectAndStartNew() {
 
     state.siteName = "";
     state.siteLocation = "";
-    state.depthUnit = "metric";
+    state.crewMembers = loadRecentCrewMembers();
+    state.depthUnit = defaultDepthUnit;
     state.stps = [];
     state.projectImage = "";
     state.referencePhoto = "";
@@ -6610,7 +6960,8 @@ async function loadProject(projectId) {
 
     state.siteName = project.siteName || "";
     state.siteLocation = project.siteLocation || "";
-    state.depthUnit = project.depthUnit || "metric";
+    state.crewMembers = normalizeTextValue(project.crewMembers);
+    state.depthUnit = project.depthUnit || defaultDepthUnit;
     state.stps = Array.isArray(project.stps) ? project.stps : [];
     state.projectImage = project.projectImage || "";
     state.referencePhoto = project.referencePhoto || project.referenceImage || "";
