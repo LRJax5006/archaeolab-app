@@ -718,11 +718,18 @@ function bindEvents() {
 
     if (elements.jumpToFormButton) {
         elements.jumpToFormButton.addEventListener("click", function () {
+            const targetStepId = getCurrentDraftFlowStepId();
+
             if (flowSteps.length > 0) {
-                setActiveFlowStep("site", false);
+                setActiveFlowStep(targetStepId, false);
             }
             elements.entryForm.scrollIntoView({ behavior: "smooth", block: "start" });
-            elements.stpLabel.focus();
+
+            if (targetStepId === "site") {
+                elements.siteName.focus();
+            } else {
+                elements.stpLabel.focus();
+            }
         });
     }
 
@@ -1555,30 +1562,13 @@ function handleFlowFocusCapture(event) {
     persistFlowResumeState();
 }
 
-function getSiteFlowStepValidation() {
-    const requiredFields = [
-        {
-            field: elements.siteName,
-            label: "Site Name"
-        },
-        {
-            field: elements.siteLocation,
-            label: "Site Location"
-        },
-        {
-            field: elements.stpLabel,
-            label: "Current STP Label"
-        }
-    ];
-
-    for (const requiredField of requiredFields) {
-        if (!requiredField.field || !normalizeTextValue(requiredField.field.value)) {
-            return {
-                complete: false,
-                message: "Complete Site Details before moving forward. Add " + requiredField.label + ".",
-                focusField: requiredField.field || null
-            };
-        }
+function getCurrentEntryFlowValidation() {
+    if (!elements.stpLabel || !normalizeTextValue(elements.stpLabel.value)) {
+        return {
+            complete: false,
+            message: "Complete STP Data before moving forward. Add the current STP or Unit label.",
+            focusField: elements.stpLabel || null
+        };
     }
 
     const entryType = normalizeEntryTypeValue(elements.stpEntryType && elements.stpEntryType.value);
@@ -1608,7 +1598,42 @@ function getSiteFlowStepValidation() {
     };
 }
 
+function getSiteFlowStepValidation() {
+    const requiredFields = [
+        {
+            field: elements.siteName,
+            label: "Site Name"
+        },
+        {
+            field: elements.siteLocation,
+            label: "Site Location"
+        }
+    ];
+
+    for (const requiredField of requiredFields) {
+        if (!requiredField.field || !normalizeTextValue(requiredField.field.value)) {
+            return {
+                complete: false,
+                message: "Complete Site Details before moving forward. Add " + requiredField.label + ".",
+                focusField: requiredField.field || null
+            };
+        }
+    }
+
+    return {
+        complete: true,
+        message: "",
+        focusField: null
+    };
+}
+
 function getStrataFlowStepValidation() {
+    const entryValidation = getCurrentEntryFlowValidation();
+
+    if (!entryValidation.complete) {
+        return entryValidation;
+    }
+
     const cards = getMeaningfulStratumCards();
     const requiredFieldDetails = [
         {
@@ -4821,6 +4846,30 @@ function handleUseCurrentGps() {
     );
 }
 
+function getCurrentDraftFlowStepId() {
+    const hasSiteDetails = Boolean(
+        normalizeTextValue(elements.siteName && elements.siteName.value)
+        && normalizeTextValue(elements.siteLocation && elements.siteLocation.value)
+    );
+
+    return hasSiteDetails ? "strata" : "site";
+}
+
+function focusPrimaryDraftField() {
+    const targetStepId = getCurrentDraftFlowStepId();
+    const targetField = targetStepId === "site"
+        ? elements.siteName
+        : elements.stpLabel;
+
+    if (flowModeEnabled && flowSteps.length > 0) {
+        setActiveFlowStep(targetStepId, false);
+    }
+
+    if (targetField) {
+        targetField.focus();
+    }
+}
+
 function resetCurrentStp(shouldFocus) {
     if (referencePhotoPreviewKind === "draft") {
         clearReferencePhotoPreview(false);
@@ -4850,7 +4899,7 @@ function resetCurrentStp(shouldFocus) {
     refreshPhotoRulesAll();
 
     if (shouldFocus) {
-        elements.stpLabel.focus();
+        focusPrimaryDraftField();
     }
     updateActiveStpBar();
 }
@@ -5005,7 +5054,7 @@ function reopenSavedStp(stpIndex) {
     refreshPhotoRulesAll();
     refreshStratumSuggestionsAll();
     setActiveEditStpIndex(normalizedIndex);
-    setActiveFlowStep("site", false);
+    setActiveFlowStep("strata", false);
 
     elements.entryForm.scrollIntoView({ behavior: "smooth", block: "start" });
     elements.stpLabel.focus();

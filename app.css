@@ -863,6 +863,10 @@ h1 {
     -webkit-overflow-scrolling: touch;
 }
 
+.stp-data-card {
+    margin-bottom: 14px;
+}
+
 .stratum-card-head,
 .saved-stp-head {
     display: flex;

@@ -168,7 +168,7 @@
                         <div class="section-head">
                             <div>
                                 <h2>Site Details</h2>
-                                <p>Start with the site name, site location, and the first STP label.</p>
+                                <p>Set the site name, location, crew, and depth measurement once. STP data is entered in the next section.</p>
                             </div>
                         </div>
 
@@ -197,7 +197,61 @@
                                     <option value="standard">Standard</option>
                                 </select>
                             </label>
+                        </div>
 
+                        <p class="mapping-note">
+                            Excel-ready export starts with the STPs sheet column order:
+                            <strong>Sup, Transect, Unit, STP, Stratum, Depth, Munsell, Texture, Horizon, Notes/Inclusions</strong>.
+                        </p>
+                    </section>
+
+                    <aside class="panel entry-photo-panel" aria-label="Field reference photo" data-flow-step="site" data-flow-label="Site Details">
+                        <div class="entry-photo-media">
+                            <img id="referencePhotoImg" class="entry-photo-img" src="IMG_3376.JPG" alt="Reference photo beside the STP data entry area" loading="lazy">
+                            <div id="referencePhotoEmpty" class="entry-photo-empty" hidden>
+                                <p>Open a recent photo or choose one from your storage.</p>
+                            </div>
+                        </div>
+                        <div class="entry-photo-copy">
+                            <p class="eyebrow">Field Reference</p>
+                            <h2>Reference Photo</h2>
+                            <p>Keep a field image visible while entering site details, strata descriptions, and notes.</p>
+                            <div class="entry-photo-actions">
+                                <button type="button" id="openReferencePhotoButton" class="secondary-button">Open Reference Photo</button>
+                                <button type="button" id="closeReferencePhotoPreviewButton" class="ghost-button" hidden>Close Preview</button>
+                                <button type="button" id="clearReferencePhotoButton" class="ghost-button" hidden>Clear</button>
+                            </div>
+                            <input type="file" id="referencePhotoInput" accept="image/*" hidden>
+                            <p id="referencePhotoMessage" class="entry-photo-message" aria-live="polite"></p>
+                            <p id="referencePhotoSavedHint" class="entry-photo-saved-hint" hidden>Saved with session and project.</p>
+                            <details id="referencePhotoLibrary" class="entry-photo-library">
+                                <summary id="referencePhotoLibrarySummary">STP Photos In App</summary>
+                                <p class="entry-photo-library-note">Draft photos stay in app memory until Save STP. Saved STP photos are kept in app photo storage and can be previewed here.</p>
+                                <div id="referencePhotoLibraryList" class="entry-photo-library-list"></div>
+                            </details>
+                        </div>
+                    </aside>
+                </div>
+
+                <section class="panel" data-flow-step="strata" data-flow-label="STP Data &amp; Strata">
+                    <div class="section-head">
+                        <div>
+                            <h2>STP Data &amp; Strata</h2>
+                            <p>Update the current STP or Unit details here, then add one card for each stratum.</p>
+                        </div>
+
+                        <button type="button" id="addStratumButton" class="secondary-button">Add Stratum</button>
+                    </div>
+
+                    <article class="stratum-card stp-data-card">
+                        <div class="stratum-card-head">
+                            <div>
+                                <p class="stratum-kicker">Current Entry</p>
+                                <h3 class="stratum-title">STP Data</h3>
+                            </div>
+                        </div>
+
+                        <div class="field-grid">
                             <label class="field">
                                 <span>STP Entry Type</span>
                                 <select id="stpEntryType" name="stpEntryType">
@@ -253,7 +307,7 @@
                             </div>
 
                             <div class="field stp-label-field">
-                                <label for="stpLabel">Current STP Label</label>
+                                <label for="stpLabel">Current STP / Unit Label</label>
                                 <div class="inline-field">
                                     <input type="text" id="stpLabel" name="stpLabel" placeholder="A1" required>
                                     <button type="button" id="suggestLabelButton" class="secondary-button">Suggest Next</button>
@@ -277,55 +331,12 @@
                                 <p class="help-text">Typical examples are A1, A2, A3, B1, B2, B3. For supplemental tests, choose Supplemental STP, pick a parent base STP, and set Sup to N, S, E, or W. Use Unit for unit-based identifiers.</p>
                             </div>
                         </div>
-
-                        <p class="mapping-note">
-                            Excel-ready export starts with the STPs sheet column order:
-                            <strong>Sup, Transect, Unit, STP, Stratum, Depth, Munsell, Texture, Horizon, Notes/Inclusions</strong>.
-                        </p>
-                    </section>
-
-                    <aside class="panel entry-photo-panel" aria-label="Field reference photo" data-flow-step="site" data-flow-label="Site Details">
-                        <div class="entry-photo-media">
-                            <img id="referencePhotoImg" class="entry-photo-img" src="IMG_3376.JPG" alt="Reference photo beside the STP data entry area" loading="lazy">
-                            <div id="referencePhotoEmpty" class="entry-photo-empty" hidden>
-                                <p>Open a recent photo or choose one from your storage.</p>
-                            </div>
-                        </div>
-                        <div class="entry-photo-copy">
-                            <p class="eyebrow">Field Reference</p>
-                            <h2>Reference Photo</h2>
-                            <p>Keep a field image visible while entering site details, strata descriptions, and notes.</p>
-                            <div class="entry-photo-actions">
-                                <button type="button" id="openReferencePhotoButton" class="secondary-button">Open Reference Photo</button>
-                                <button type="button" id="closeReferencePhotoPreviewButton" class="ghost-button" hidden>Close Preview</button>
-                                <button type="button" id="clearReferencePhotoButton" class="ghost-button" hidden>Clear</button>
-                            </div>
-                            <input type="file" id="referencePhotoInput" accept="image/*" hidden>
-                            <p id="referencePhotoMessage" class="entry-photo-message" aria-live="polite"></p>
-                            <p id="referencePhotoSavedHint" class="entry-photo-saved-hint" hidden>Saved with session and project.</p>
-                            <details id="referencePhotoLibrary" class="entry-photo-library">
-                                <summary id="referencePhotoLibrarySummary">STP Photos In App</summary>
-                                <p class="entry-photo-library-note">Draft photos stay in app memory until Save STP. Saved STP photos are kept in app photo storage and can be previewed here.</p>
-                                <div id="referencePhotoLibraryList" class="entry-photo-library-list"></div>
-                            </details>
-                        </div>
-                    </aside>
-                </div>
-
-                <section class="panel" data-flow-step="strata" data-flow-label="Strata">
-                    <div class="section-head">
-                        <div>
-                            <h2>Strata</h2>
-                            <p>Add one card for each stratum within the current STP.</p>
-                        </div>
-
-                        <button type="button" id="addStratumButton" class="secondary-button">Add Stratum</button>
-                    </div>
+                    </article>
 
                     <div id="strataList" class="strata-list"></div>
                 </section>
 
-                <div class="form-actions" data-flow-step="strata" data-flow-label="Strata">
+                <div class="form-actions" data-flow-step="strata" data-flow-label="STP Data &amp; Strata">
                     <button type="button" id="resetCurrentButton" class="ghost-button">Reset Current STP</button>
                     <button type="button" id="saveStpButton" class="primary-button">Save STP</button>
                 </div>
