@@ -1,7 +1,7 @@
 {
   "exportType": "archaeolab-session-backup",
   "formatVersion": 2,
-  "exportedAt": "2026-03-19T00:38:21.214Z",
+  "exportedAt": "2026-03-19T02:09:22.924Z",
   "session": {
     "siteName": "Johnson Site",
     "siteLocation": "Howard",
@@ -648,7 +648,7 @@
         "supDirection": "",
         "gpsLatitude": "",
         "gpsLongitude": "",
-        "savedAt": "2026-03-19T00:38:21.213Z",
+        "savedAt": "2026-03-19T02:09:22.922Z",
         "strata": [
           {
             "stratumLabel": "1",
