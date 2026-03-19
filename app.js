@@ -6936,8 +6936,8 @@ function saveProjectAndStartNew() {
         return;
     }
 
-    const defaultName = state.siteName || "Untitled Project";
-    const projectName = prompt("Enter a name for this project:", defaultName);
+    const defaultName = normalizeTextValue(state.siteName) || "Untitled Project";
+    const projectName = prompt("Enter a project name. Press OK to use the suggested site name:", defaultName);
 
     if (projectName === null) {
         return;
