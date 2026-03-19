@@ -77,6 +77,33 @@ h1 {
     line-height: 1.02;
 }
 
+.title-logo-stack {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    padding: 10px 18px;
+    isolation: isolate;
+}
+
+.title-logo-stack h1 {
+    position: relative;
+    z-index: 1;
+    text-shadow: 0 2px 6px rgba(255, 255, 255, 0.45);
+}
+
+.title-logo-mark {
+    position: absolute;
+    inset: -18px -30px;
+    width: calc(100% + 60px);
+    height: calc(100% + 36px);
+    object-fit: contain;
+    opacity: 0.23;
+    filter: contrast(1.05) saturate(0.9);
+    pointer-events: none;
+    user-select: none;
+    mix-blend-mode: multiply;
+}
+
 .intro {
     max-width: 62ch;
     margin: 12px 0 0;
@@ -2215,6 +2242,16 @@ body.dark-contrast .map-viewer-img {
 
     h1 {
         font-size: clamp(1.65rem, 8.2vw, 2.3rem);
+    }
+
+    .title-logo-stack {
+        padding: 8px 12px;
+    }
+
+    .title-logo-mark {
+        inset: -12px -14px;
+        width: calc(100% + 28px);
+        height: calc(100% + 24px);
     }
 
     .session-status {
