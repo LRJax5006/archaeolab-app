@@ -1330,7 +1330,7 @@ button:hover {
     background:
         linear-gradient(180deg, rgba(0, 0, 0, 0.4), rgba(0, 0, 0, 0.7)),
         linear-gradient(92deg, rgba(200, 155, 42, 0.4), rgba(218, 108, 22, 0.22)),
-        url("Boots n Shovels banner.jpg") center 42% / cover no-repeat;
+        url("banner - Archaeolab_files/Archaeology Trowel_orange to blk.jpg") center 42% / cover no-repeat;
     border: 2px solid var(--line);
     box-shadow: var(--shadow);
     display: flex;
@@ -1628,7 +1628,7 @@ body.high-contrast .project-banner {
     background:
         linear-gradient(180deg, rgba(0, 0, 0, 0.62), rgba(0, 0, 0, 0.86)),
         linear-gradient(92deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08)),
-        url("Boots n Shovels banner.jpg") center 42% / cover no-repeat;
+    url("banner - Archaeolab_files/Archaeology Trowel_orange to blk.jpg") center 42% / cover no-repeat;
 }
 
 body.high-contrast .project-banner-overlay {
@@ -2037,7 +2037,7 @@ body.dark-contrast .project-banner {
     background:
         linear-gradient(180deg, rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.90)),
         linear-gradient(92deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04)),
-        url("Boots n Shovels banner.jpg") center 42% / cover no-repeat;
+    url("banner - Archaeolab_files/Archaeology Trowel_orange to blk.jpg") center 42% / cover no-repeat;
 }
 
 body.dark-contrast .project-banner-overlay {
