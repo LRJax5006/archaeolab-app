@@ -35,9 +35,9 @@ body {
     font-family: "Trebuchet MS", "Gill Sans", sans-serif;
     color: var(--ink);
     background:
-    radial-gradient(circle at 8% 12%, rgba(200, 155, 42, 0.18), transparent 34%),
-    radial-gradient(circle at 88% 0%, rgba(218, 108, 22, 0.13), transparent 28%),
-    linear-gradient(145deg, #c9c2b8 0%, #e1ddd6 34%, #f8f6f2 100%);
+    radial-gradient(circle at 10% 14%, rgba(200, 155, 42, 0.12), transparent 34%),
+    radial-gradient(circle at 88% 4%, rgba(218, 108, 22, 0.10), transparent 26%),
+    linear-gradient(145deg, #0f1114 0%, #171b20 42%, #1f242b 100%);
 }
 
 .page-shell {
