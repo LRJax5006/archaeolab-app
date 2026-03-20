@@ -1,3 +1,237 @@
+// Handler to clear all STPs
+function handleClearAllStps() {
+    const count = gpsRegistry.points.size;
+    gpsRegistry.points.clear();
+    renderSavedStps && renderSavedStps();
+    alert(`Cleared all ${count} STPs from the registry.`);
+}
+// Attach clear all STPs button handler after DOM loads
+window.addEventListener('DOMContentLoaded', function() {
+    const btnAll = document.getElementById('clearAllStpButton');
+    if (btnAll) btnAll.onclick = handleClearAllStps;
+});
+// Handler to clear all grid points
+function handleClearGridPoints() {
+    let removed = 0;
+    for (const [id, pt] of gpsRegistry.points.entries()) {
+        if (pt.type === 'grid') {
+            gpsRegistry.points.delete(id);
+            removed++;
+        }
+    }
+    renderSavedStps && renderSavedStps();
+    alert(`Cleared ${removed} grid points.`);
+}
+// Attach clear button handler after DOM loads
+window.addEventListener('DOMContentLoaded', function() {
+    const btn = document.getElementById('clearGridButton');
+    if (btn) btn.onclick = handleClearGridPoints;
+});
+// --- SHP Import and Grid Generation ---
+
+// Helper to populate corner dropdowns with all unique boundary vertices
+function populateCornerDropdowns(coords) {
+    const startSel = document.getElementById('startCornerInput');
+    const endSel = document.getElementById('endCornerInput');
+    if (!startSel || !endSel) return;
+    startSel.innerHTML = '';
+    endSel.innerHTML = '';
+    coords.forEach((pt, i) => {
+        const label = `Corner ${i + 1} (${pt[0].toFixed(6)}, ${pt[1].toFixed(6)})`;
+        const opt1 = document.createElement('option');
+        opt1.value = i;
+        opt1.textContent = label;
+        const opt2 = opt1.cloneNode(true);
+        startSel.appendChild(opt1);
+        endSel.appendChild(opt2);
+    });
+}
+function handleImportShpFiles(event) {
+    console.log('[SHP Import] File input event fired:', event);
+    const files = event.target.files;
+    console.log('[SHP Import] Files received:', files);
+    if (!files || files.length === 0) {
+        alert("No SHP files selected.");
+        return;
+    }
+    // Accept either a single .zip or multiple SHP files
+    if (files.length === 1 && files[0].name.toLowerCase().endsWith('.zip')) {
+        window.shp(files[0]).then(function(geojson) {
+            if (!geojson || !geojson.features || geojson.features.length === 0) {
+                alert("No features found in SHP zip file.");
+                return;
+            }
+            window._lastParcelGeojson = geojson;
+            elements.shpGridControls.style.display = "inline-block";
+            elements.shpGridControls.dataset.parcelLoaded = "1";
+            elements.shpGridControls.dataset.parcelGeojson = JSON.stringify(geojson);
+            // Extract coordinates and populate corner dropdowns
+            let geom = geojson;
+            if (geojson.type === 'FeatureCollection') {
+                const polyFeature = geojson.features.find(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+                if (polyFeature) geom = polyFeature.geometry;
+            } else if (geojson.type === 'Feature' && geojson.geometry && (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon')) {
+                geom = geojson.geometry;
+            }
+            let coords = [];
+            if (geom.type === 'Polygon') coords = geom.coordinates;
+            else if (geom.type === 'MultiPolygon') coords = geom.coordinates[0];
+            if (Array.isArray(coords[0][0])) coords = coords[0];
+            populateCornerDropdowns(coords);
+            alert("Parcel boundary loaded. Set grid parameters and click Generate STP Grid.");
+        }).catch(function(e) {
+            alert("Error parsing SHP zip: " + e);
+        });
+        return;
+    }
+    // If multiple files, allow user to select all SHP/DBF/SHX/PRJ/CPG at once
+    if (files.length > 1) {
+        const fileMap = {};
+        for (const file of files) {
+            const ext = file.name.split('.').pop().toLowerCase();
+            fileMap[ext] = file;
+        }
+        if (!fileMap.shp || !fileMap.dbf) {
+            alert("Please select a .zip file or at least .shp and .dbf files (and .shx, .prj, .cpg if available).");
+            return;
+        }
+        window.shp(fileMap).then(function(geojson) {
+            if (!geojson || !geojson.features || geojson.features.length === 0) {
+                alert("No features found in SHP file.");
+                return;
+            }
+            window._lastParcelGeojson = geojson;
+            elements.shpGridControls.style.display = "inline-block";
+            elements.shpGridControls.dataset.parcelLoaded = "1";
+            elements.shpGridControls.dataset.parcelGeojson = JSON.stringify(geojson);
+            alert("Parcel boundary loaded. Set grid parameters and click Generate STP Grid.");
+        }).catch(function(e) {
+            alert("Error parsing SHP: " + e);
+        });
+        return;
+    }
+    alert("Please select a .zip file or all SHP/DBF/SHX/PRJ/CPG files at once.");
+}
+
+function handleGenerateStpGrid() {
+    const setback = parseFloat(elements.setbackInput.value) || 10;
+    const spacing = parseFloat(elements.spacingInput.value) || 50;
+    if (!elements.shpGridControls.dataset.parcelGeojson) {
+        alert("No parcel boundary loaded. Import a SHP or GeoJSON file first.");
+        return;
+    }
+    let geojson = JSON.parse(elements.shpGridControls.dataset.parcelGeojson);
+    // Extract Polygon/MultiPolygon geometry from FeatureCollection or Feature if needed
+    let geom = geojson;
+    if (geojson.type === 'FeatureCollection') {
+        const polyFeature = geojson.features.find(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+        if (!polyFeature) {
+            alert('No Polygon or MultiPolygon found in FeatureCollection.');
+            return;
+        }
+        geom = polyFeature.geometry;
+    } else if (geojson.type === 'Feature' && geojson.geometry && (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon')) {
+        geom = geojson.geometry;
+    } else if (geojson.type !== 'Polygon' && geojson.type !== 'MultiPolygon') {
+        alert('Input is not a Polygon or MultiPolygon.');
+        return;
+    }
+    // Convert setback and spacing from feet to meters for Turf.js
+    const setbackMeters = setback * 0.3048;
+    const spacingMeters = spacing * 0.3048;
+    // Buffer inward for setback
+    let buffered = geom;
+    try {
+        buffered = turf.buffer(geom, -setbackMeters, { units: 'meters' });
+    } catch (e) {
+        alert("Error buffering parcel for setback: " + e + "\n\nGeoJSON type: " + geom.type);
+        return;
+    }
+    // Get bbox for grid
+    let bbox;
+    try {
+        bbox = turf.bbox(buffered);
+    } catch (e) {
+        alert("Error computing bbox for grid: " + e);
+        return;
+    }
+    // Find the selected start and end corners
+    // Get all boundary vertices
+    let coords = [];
+    if (buffered.type === 'Feature') coords = buffered.geometry.coordinates;
+    else if (buffered.type === 'Polygon') coords = buffered.coordinates;
+    else if (buffered.type === 'MultiPolygon') coords = buffered.coordinates[0];
+    else if (buffered.type === 'FeatureCollection') coords = buffered.features[0].geometry.coordinates;
+    if (Array.isArray(coords[0][0])) coords = coords[0];
+    // Use selected indices for base line
+    const startIdx = parseInt(document.getElementById('startCornerInput')?.value || '0', 10);
+    const endIdx = parseInt(document.getElementById('endCornerInput')?.value || '1', 10);
+    const base1 = coords[startIdx];
+    const base2 = coords[endIdx];
+    if (base2[0] === base1[0] && base2[1] === base1[1]) {
+        alert('Start and end corners are the same. Select two different corners.');
+        return;
+    }
+    // Create base line (A) from base1 to base2
+    const baseLine = turf.lineString([base1, base2]);
+    const baseLength = turf.length(baseLine, { units: 'meters' });
+    const nBasePoints = Math.floor(baseLength / spacingMeters) + 1;
+    // Direction of base line (bearing)
+    const baseBearing = turf.bearing(turf.point(base1), turf.point(base2));
+    // Perpendicular bearing for offset lines (90 degrees to right)
+    const perpBearing = baseBearing + 90;
+    // Generate grid points along base line and parallel offset lines
+    let added = 0;
+    let colLabels = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let gridPoints = [];
+    let maxOffset = 0;
+    // Estimate max offset needed to cover bbox diagonal
+    try {
+        const bbox = turf.bbox(buffered);
+        const diag = turf.distance([bbox[0], bbox[1]], [bbox[2], bbox[3]], { units: 'meters' });
+        maxOffset = diag;
+    } catch (e) {
+        maxOffset = 500; // fallback
+    }
+    let col = 0;
+    for (let offset = 0; offset < maxOffset; offset += spacingMeters, col++) {
+        // Offset the base line by 'offset' meters to the right (east)
+        let offsetLine = [];
+        for (let i = 0; i < nBasePoints; i++) {
+            // Interpolate point along base line
+            const dist = i * spacingMeters;
+            let pt = turf.along(baseLine, dist, { units: 'meters' });
+            // Offset perpendicular by 'offset' meters
+            pt = turf.destination(pt.geometry.coordinates, offset, perpBearing, { units: 'meters' });
+            const [lon, lat] = pt.geometry.coordinates;
+            // Check if inside buffered parcel
+            if (!turf.booleanPointInPolygon([lon, lat], buffered)) continue;
+            // Label: A1, A2, B1, B2, ...
+            const label = `${colLabels[col % colLabels.length]}${i + 1}`;
+            // Add to registry if not already present (by coordinate)
+            let exists = false;
+            for (const p of gpsRegistry.points.values()) {
+                if (Math.abs(p.lat - lat) < 1e-6 && Math.abs(p.lon - lon) < 1e-6) {
+                    exists = true; break;
+                }
+            }
+            if (!exists) {
+                const id = `grid-${Date.now()}-${col}-${i}`;
+                gpsRegistry.points.set(id, {
+                    id, lat, lon, label, type: 'grid', source: 'parcel-shp', status: 'unmarked', stpIndex: null, importedAt: Date.now()
+                });
+                added++;
+                gridPoints.push({ id, lat, lon, label });
+            }
+        }
+        // Stop if no points were added in this column (fully outside parcel)
+        if (gridPoints.length === 0 || (gridPoints.length > 0 && gridPoints.slice(-nBasePoints).filter(pt => pt.label.startsWith(colLabels[col % colLabels.length])).length === 0)) {
+            break;
+        }
+    }
+    renderSavedStps && renderSavedStps();
+    alert(`Generated ${added} STP grid points inside parcel. View on map or in list below.`);
+}
 const storageKey = "archaeolab-stp-session-v1";
 const projectsStorageKey = "archaeolab-projects-v1";
 const filterStorageKey = "archaeolab-ui-filters-v1";
@@ -17,6 +251,10 @@ const appDataSessionEntryKey = "session";
 const appDataProjectsEntryKey = "projects";
 const appJsonBackupHandleKey = "session-json-backup:app-default";
 const gpsMapPayloadStorageKey = "archaeolab-gps-map-payload-v1";
+const gpsPointsRegistryStorageKey = "archaeolab-gps-points-registry-v1";
+const gpsPointsDatabaseName = "archaeolab-gps-points-v1";
+const gpsPointsStore = "points";
+const gpsPointsDatabaseVersion = 1;
 const sessionBackupFormatVersion = 2;
 const maxProjectImageSizeBytes = 4 * 1024 * 1024;
 const maxReferencePhotoSizeBytes = 4 * 1024 * 1024;
@@ -25,6 +263,7 @@ const approximateLocalStorageQuotaBytes = 5 * 1024 * 1024;
 const defaultReferencePhotoSrc = "IMG_3376.JPG";
 const defaultMapViewerTitle = "Project Map Reference";
 const gpsCoordinateDecimalPlaces = 6;
+const gpsCoordinateMatchTolerance = 0.000005;
 const persistStratumPhotoBlobsInBrowser = true;
 const autoJsonBackupOnSaveStp = true;
 const importQualityProfiles = {
@@ -348,9 +587,180 @@ const state = {
     referencePhoto: ""
 };
 
+// GPS Real-Time Event System
+// Listen for changes to GPS points and STPs across tabs/workers
+const gpsEventBus = new EventTarget();
+const GPS_POINT_MARKED = "gps:point-marked";
+const GPS_POINT_UNMARKED = "gps:point-unmarked";
+const GPS_POINT_UPDATED = "gps:point-updated";
+const STP_GPS_CHANGED = "stp:gps-changed";
+
+// GPS Registry State - tracks imported GPS points and their STP associations
+const gpsRegistry = {
+    points: new Map(), // pointId -> {id, lat, lon, label, type, source, status, stpIndex, importedAt}
+    stpToPointMap: new Map(), // stpIndex -> pointId
+    pointToStpMap: new Map(), // pointId -> stpIndex
+    isLoaded: false
+};
+
+let gpsPointsDatabasePromise;
+let currentLocationWatchId = null;
+let currentLocation = null;
+
 const elements = {};
 
-document.addEventListener("DOMContentLoaded", initializeApp);
+
+import { showLoginModal } from "./ui/login.js";
+import { setBackend } from "./storage/index.js";
+import { localBackend } from "./storage/local.js";
+import { cloudBackend } from "./storage/cloud.js";
+
+// TEMP: Add test button for Google Drive save/load
+window.addEventListener('DOMContentLoaded', function() {
+    let testBtn = document.getElementById('testDriveButton');
+    if (!testBtn) {
+        testBtn = document.createElement('button');
+        testBtn.id = 'testDriveButton';
+        testBtn.textContent = 'Test Google Drive Save/Load';
+        testBtn.className = 'ghost-button';
+        document.body.appendChild(testBtn);
+    }
+    testBtn.onclick = async () => {
+        try {
+            // Save current session state to Drive
+            await cloudBackend.save(storageKey, state);
+            console.log('Saved to Google Drive!');
+            // Try loading it back (using current state for site name)
+            const loaded = await cloudBackend.load(storageKey, state);
+            console.log('Loaded from Google Drive:', loaded);
+            alert('Google Drive save/load successful! Check console for details.');
+        } catch (e) {
+            console.error('Google Drive test failed:', e);
+            alert('Google Drive test failed. See console for details.');
+        }
+    };
+});
+
+let currentUser = null;
+
+function handleLogin(provider) {
+    currentUser = { provider, name: provider === 'google' ? 'Google User' : 'iCloud User' };
+    setBackend(cloudBackend);
+    updateLoginUi();
+    updateSyncStatusUi('connecting');
+    if (provider === 'google' && window.google && window.google.accounts && window.gapi) {
+        import('./storage/cloud.js').then(mod => {
+            if (mod && mod.ensureDriveToken) {
+                mod.ensureDriveToken()
+                    .then(() => {
+                        updateSyncStatusUi('connected');
+                    })
+                    .catch(() => {
+                        updateSyncStatusUi('error');
+                    });
+            }
+        });
+    } else {
+        updateSyncStatusUi('connected');
+    }
+    if (loginModal) loginModal.remove();
+}
+
+function handleLogout() {
+    currentUser = null;
+    setBackend(localBackend);
+    updateLoginUi();
+    updateSyncStatusUi('disconnected');
+    if (loginModal) loginModal.remove();
+    // Optionally clear cloud-only state
+}
+// Update Cloud Sync status indicator and text
+function updateSyncStatusUi(state) {
+    const indicator = document.getElementById('syncStatusIndicator');
+    const text = document.getElementById('syncStatusText');
+    if (!indicator || !text) return;
+    if (state === 'connected') {
+        indicator.className = 'sync-status-indicator green';
+        text.textContent = 'Connected';
+    } else if (state === 'connecting') {
+        indicator.className = 'sync-status-indicator yellow';
+        text.textContent = 'Connecting...';
+    } else if (state === 'error') {
+        indicator.className = 'sync-status-indicator red';
+        text.textContent = 'Error';
+    } else {
+        indicator.className = 'sync-status-indicator red';
+        text.textContent = 'Not connected';
+    }
+    // Show last sync time if available
+    const lastSyncTimeEl = document.getElementById('lastSyncTime');
+    if (lastSyncTimeEl) {
+        if (window.lastSyncTimestamp) {
+            const d = new Date(window.lastSyncTimestamp);
+            lastSyncTimeEl.textContent = 'Last sync: ' + d.toLocaleString();
+        } else {
+            lastSyncTimeEl.textContent = '';
+        }
+    }
+}
+
+let loginModal = null;
+function updateLoginUi() {
+    const loginBtn = document.getElementById('loginUiButton');
+    const userLabel = document.getElementById('userUiLabel');
+    if (loginBtn) {
+        loginBtn.textContent = currentUser ? 'Sign out' : 'Sign in';
+        loginBtn.title = currentUser ? 'Sign out of cloud' : 'Sign in to cloud';
+    }
+    if (userLabel) {
+        if (currentUser && currentUser.provider === 'google') {
+            userLabel.textContent = `Google: ${currentUser.name || 'User'}`;
+            userLabel.style.color = '#e94335';
+        } else if (currentUser && currentUser.provider === 'icloud') {
+            userLabel.textContent = `iCloud: ${currentUser.name || 'User'}`;
+            userLabel.style.color = '#007aff';
+        } else {
+            userLabel.textContent = 'Not signed in';
+            userLabel.style.color = '#fff';
+        }
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    // Add login UI to header if not present
+    let loginBtn = document.getElementById('loginUiButton');
+    let userLabel = document.getElementById('userUiLabel');
+    if (!loginBtn) {
+        loginBtn = document.createElement('button');
+        loginBtn.id = 'loginUiButton';
+        loginBtn.className = 'ghost-button';
+        // Removed marginLeft to keep button aligned
+        const heroCard = document.querySelector('.hero-card-buttons');
+        if (heroCard) heroCard.appendChild(loginBtn);
+    }
+    if (!userLabel) {
+        userLabel = document.createElement('span');
+        userLabel.id = 'userUiLabel';
+        userLabel.className = 'user-label';
+        userLabel.textContent = 'Not signed in';
+        const heroCard = document.querySelector('.hero-card-buttons');
+        if (heroCard) heroCard.appendChild(userLabel);
+    }
+    // Always attach the click handler ONCE
+    loginBtn.onclick = () => {
+        if (currentUser) handleLogout();
+        else {
+            if (loginModal) loginModal.remove();
+            loginModal = showLoginModal({ onLogin: handleLogin, onLogout: handleLogout, user: currentUser });
+        }
+    };
+    // Default to local backend until login
+    setBackend(localBackend);
+    updateLoginUi();
+    // Optionally show login modal on first load
+    // loginModal = showLoginModal({ onLogin: handleLogin, onLogout: handleLogout, user: currentUser });
+    initializeApp();
+});
 
 async function initializeApp() {
     cacheElements();
@@ -376,6 +786,26 @@ async function initializeApp() {
     updateActiveStpBar();
     initializeFlowNavigator();
     await updateBackupDestinationStatus();
+    // Set up Cloud Sync card actions
+    const viewBackupsBtn = document.getElementById('viewBackupsButton');
+    if (viewBackupsBtn) viewBackupsBtn.onclick = handleViewBackups;
+    const syncSettingsBtn = document.getElementById('syncSettingsButton');
+    if (syncSettingsBtn) syncSettingsBtn.onclick = handleSyncSettings;
+    // Placeholder: View Backups handler
+    function handleViewBackups() {
+        alert('View Backups: This will show backup/restore options. (To be implemented)');
+    }
+    
+    // Placeholder: Sync Settings handler
+    function handleSyncSettings() {
+        alert('Sync Settings: This will open sync/cloud settings. (To be implemented)');
+    }
+    // Set up Cloud Sync card actions
+    const viewBackupsBtn = document.getElementById('viewBackupsButton');
+    if (viewBackupsBtn) viewBackupsBtn.onclick = handleViewBackups;
+    const syncSettingsBtn = document.getElementById('syncSettingsButton');
+    if (syncSettingsBtn) syncSettingsBtn.onclick = handleSyncSettings;
+    // No need to patch manualSyncButton, now styled by sync-action-btn
 }
 
 function registerServiceWorker() {
@@ -447,6 +877,8 @@ function handlePwaInstallDismiss() {
 }
 
 function cacheElements() {
+        elements.importGeojsonButton = document.getElementById("importGeojsonButton");
+        elements.importGeojsonInput = document.getElementById("importGeojsonInput");
     elements.entryForm = document.getElementById("entryForm");
     elements.siteName = document.getElementById("siteName");
     elements.siteLocation = document.getElementById("siteLocation");
@@ -477,6 +909,13 @@ function cacheElements() {
     elements.viewGpsMapButton = document.getElementById("viewGpsMapButton");
     elements.importCsvButton = document.getElementById("importCsvButton");
     elements.importCsvInput = document.getElementById("importCsvInput");
+    elements.importGpsPointsButton = document.getElementById("importGpsPointsButton");
+    elements.importShpButton = document.getElementById("importShpButton");
+    elements.importShpInput = document.getElementById("importShpInput");
+    elements.shpGridControls = document.getElementById("shpGridControls");
+    elements.setbackInput = document.getElementById("setbackInput");
+    elements.spacingInput = document.getElementById("spacingInput");
+    elements.generateGridButton = document.getElementById("generateGridButton");
     elements.exportJsonButton = document.getElementById("exportJsonButton");
     elements.importJsonButton = document.getElementById("importJsonButton");
     elements.importJsonInput = document.getElementById("importJsonInput");
@@ -556,6 +995,67 @@ function cacheElements() {
 }
 
 function bindEvents() {
+            if (elements.importGeojsonButton && elements.importGeojsonInput) {
+                elements.importGeojsonButton.addEventListener("click", function() {
+                    elements.importGeojsonInput.value = "";
+                    elements.importGeojsonInput.click();
+                });
+                elements.importGeojsonInput.addEventListener("change", handleImportGeojsonFile);
+            }
+        // --- GeoJSON Parcel Import ---
+        function handleImportGeojsonFile(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) {
+                alert("No GeoJSON file selected.");
+                return;
+            }
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const geojson = JSON.parse(e.target.result);
+                    if (!geojson || !geojson.features || geojson.features.length === 0) {
+                        alert("No features found in GeoJSON file.");
+                        return;
+                    }
+                    window._lastParcelGeojson = geojson;
+                    elements.shpGridControls.style.display = "inline-block";
+                    elements.shpGridControls.dataset.parcelLoaded = "1";
+                    elements.shpGridControls.dataset.parcelGeojson = JSON.stringify(geojson);
+                    // Extract coordinates and populate corner dropdowns (same as SHP)
+                    let geom = geojson;
+                    if (geojson.type === 'FeatureCollection') {
+                        const polyFeature = geojson.features.find(f => f.geometry && (f.geometry.type === 'Polygon' || f.geometry.type === 'MultiPolygon'));
+                        if (polyFeature) geom = polyFeature.geometry;
+                    } else if (geojson.type === 'Feature' && geojson.geometry && (geojson.geometry.type === 'Polygon' || geojson.geometry.type === 'MultiPolygon')) {
+                        geom = geojson.geometry;
+                    }
+                    let coords = [];
+                    if (geom.type === 'Polygon') coords = geom.coordinates;
+                    else if (geom.type === 'MultiPolygon') coords = geom.coordinates[0];
+                    if (Array.isArray(coords[0][0])) coords = coords[0];
+                    if (!coords || coords.length < 2) {
+                        alert('Could not extract valid boundary coordinates from GeoJSON.');
+                    } else {
+                        populateCornerDropdowns(coords);
+                    }
+                    alert("Parcel boundary loaded from GeoJSON. Set grid parameters and click Generate STP Grid.");
+                } catch (err) {
+                    alert("Error parsing GeoJSON: " + err);
+                }
+            };
+            reader.readAsText(file);
+        }
+        // SHP import and grid generation
+        if (elements.importShpButton && elements.importShpInput) {
+            elements.importShpButton.addEventListener("click", function() {
+                elements.importShpInput.value = "";
+                elements.importShpInput.click();
+            });
+            elements.importShpInput.addEventListener("change", handleImportShpFiles);
+        }
+        if (elements.generateGridButton) {
+            elements.generateGridButton.addEventListener("click", handleGenerateStpGrid);
+        }
     elements.addStratumButton.addEventListener("click", function () {
         addStratumFromBarOrAction();
     });
@@ -589,6 +1089,9 @@ function bindEvents() {
     if (elements.importCsvButton && elements.importCsvInput) {
         elements.importCsvButton.addEventListener("click", requestImportCsvFile);
         elements.importCsvInput.addEventListener("change", handleImportCsvFile);
+    }
+    if (elements.importGpsPointsButton) {
+        elements.importGpsPointsButton.addEventListener("click", requestImportGpsPointsFile);
     }
     elements.exportJsonButton.addEventListener("click", downloadSessionData);
     elements.importJsonButton.addEventListener("click", requestImportSessionFile);
@@ -821,6 +1324,10 @@ function populateDatalist(datalistId, values) {
 
 function normalizeTextValue(value) {
     return String(value == null ? "" : value).trim();
+}
+
+function generateUniqueId() {
+    return "id-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
 }
 
 function normalizeDepthUnitValue(value) {
@@ -2989,6 +3496,13 @@ async function loadSession() {
 
     updateImageStorageStatus();
     updateDataSafetyStatus();
+    
+    // Load GPS points registry
+    try {
+        await loadGpsPointsFromDatabase();
+    } catch (error) {
+        console.warn("Could not load GPS points registry:", error);
+    }
 }
 
 function saveSession() {
@@ -4236,6 +4750,232 @@ async function deletePhotoBlobsFromDatabase(photoIds) {
     }
 }
 
+// ============================================
+// GPS POINTS DATABASE FUNCTIONS
+// ============================================
+
+function getGpsPointsDatabase() {
+    if (!("indexedDB" in window)) {
+        return Promise.reject(new Error("IndexedDB is not supported in this browser."));
+    }
+
+    if (!gpsPointsDatabasePromise) {
+        gpsPointsDatabasePromise = new Promise(function (resolve, reject) {
+            const request = window.indexedDB.open(gpsPointsDatabaseName, gpsPointsDatabaseVersion);
+
+            request.onupgradeneeded = function () {
+                const database = request.result;
+
+                if (!database.objectStoreNames.contains(gpsPointsStore)) {
+                    const store = database.createObjectStore(gpsPointsStore, { keyPath: "id" });
+                    store.createIndex("source", "source", { unique: false });
+                    store.createIndex("status", "status", { unique: false });
+                    store.createIndex("importedAt", "importedAt", { unique: false });
+                }
+            };
+
+            request.onsuccess = function () {
+                resolve(request.result);
+            };
+
+            request.onerror = function () {
+                reject(request.error || new Error("Could not open GPS points storage."));
+            };
+        });
+    }
+
+    return gpsPointsDatabasePromise;
+}
+
+async function saveGpsPointToDatabase(point) {
+    const database = await getGpsPointsDatabase();
+
+    return new Promise(function (resolve, reject) {
+        const transaction = database.transaction(gpsPointsStore, "readwrite");
+        const store = transaction.objectStore(gpsPointsStore);
+
+        const pointRecord = {
+            id: point.id || generateUniqueId(),
+            lat: Number(point.lat),
+            lon: Number(point.lon),
+            label: String(point.label || ""),
+            type: String(point.type || "base"),
+            source: String(point.source || "imported"),
+            status: String(point.status || "unmarked"), // unmarked, marked, visited
+            stpIndex: point.stpIndex != null ? Number(point.stpIndex) : -1,
+            importedAt: point.importedAt || new Date().toISOString(),
+            metadata: point.metadata || {}
+        };
+
+        store.put(pointRecord);
+
+        transaction.oncomplete = function () {
+            gpsRegistry.points.set(pointRecord.id, pointRecord);
+            resolve(pointRecord);
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error || new Error("Could not save GPS point."));
+        };
+    });
+}
+
+async function loadGpsPointsFromDatabase() {
+    const database = await getGpsPointsDatabase();
+
+    return new Promise(function (resolve, reject) {
+        const transaction = database.transaction(gpsPointsStore, "readonly");
+        const store = transaction.objectStore(gpsPointsStore);
+        const request = store.getAll();
+
+        request.onsuccess = function () {
+            const points = request.result || [];
+            gpsRegistry.points.clear();
+            gpsRegistry.stpToPointMap.clear();
+            gpsRegistry.pointToStpMap.clear();
+
+            points.forEach(point => {
+                gpsRegistry.points.set(point.id, point);
+                if (point.stpIndex !== -1) {
+                    gpsRegistry.stpToPointMap.set(point.stpIndex, point.id);
+                    gpsRegistry.pointToStpMap.set(point.id, point.stpIndex);
+                }
+            });
+
+            gpsRegistry.isLoaded = true;
+            resolve(points);
+        };
+
+        request.onerror = function () {
+            reject(request.error || new Error("Could not load GPS points."));
+        };
+    });
+}
+
+async function deleteGpsPointFromDatabase(pointId) {
+    const database = await getGpsPointsDatabase();
+
+    return new Promise(function (resolve, reject) {
+        const transaction = database.transaction(gpsPointsStore, "readwrite");
+        const store = transaction.objectStore(gpsPointsStore);
+
+        store.delete(pointId);
+
+        transaction.oncomplete = function () {
+            gpsRegistry.points.delete(pointId);
+            const stpIndex = gpsRegistry.pointToStpMap.get(pointId);
+            if (stpIndex !== undefined) {
+                gpsRegistry.stpToPointMap.delete(stpIndex);
+                gpsRegistry.pointToStpMap.delete(pointId);
+            }
+            resolve();
+        };
+
+        transaction.onerror = function () {
+            reject(transaction.error || new Error("Could not delete GPS point."));
+        };
+    });
+}
+
+// Real-time GPS event dispatchers
+function dispatchGpsPointMarked(pointId, stpIndex) {
+    const point = gpsRegistry.points.get(pointId);
+    if (point) {
+        const previousLinkedStpIndex = Number.isFinite(Number(point.stpIndex)) ? Number(point.stpIndex) : -1;
+        const previousPointIdForStp = gpsRegistry.stpToPointMap.get(stpIndex);
+
+        if (previousLinkedStpIndex >= 0 && previousLinkedStpIndex !== stpIndex) {
+            gpsRegistry.stpToPointMap.delete(previousLinkedStpIndex);
+        }
+
+        if (previousPointIdForStp && previousPointIdForStp !== pointId) {
+            const previousPoint = gpsRegistry.points.get(previousPointIdForStp);
+            if (previousPoint) {
+                previousPoint.status = "unmarked";
+                previousPoint.stpIndex = -1;
+                saveGpsPointToDatabase(previousPoint).catch(console.error);
+            }
+            gpsRegistry.pointToStpMap.delete(previousPointIdForStp);
+        }
+
+        point.status = "marked";
+        point.stpIndex = stpIndex;
+        gpsRegistry.stpToPointMap.set(stpIndex, pointId);
+        gpsRegistry.pointToStpMap.set(pointId, stpIndex);
+        saveGpsPointToDatabase(point).catch(console.error);
+    }
+
+    gpsEventBus.dispatchEvent(new CustomEvent(GPS_POINT_MARKED, {
+        detail: { pointId, stpIndex, point }
+    }));
+}
+
+function dispatchGpsPointUnmarked(pointId) {
+    const point = gpsRegistry.points.get(pointId);
+    if (point) {
+        const stpIndex = point.stpIndex;
+        point.status = "unmarked";
+        point.stpIndex = -1;
+        gpsRegistry.stpToPointMap.delete(stpIndex);
+        gpsRegistry.pointToStpMap.delete(pointId);
+        saveGpsPointToDatabase(point).catch(console.error);
+    }
+
+    gpsEventBus.dispatchEvent(new CustomEvent(GPS_POINT_UNMARKED, {
+        detail: { pointId, point }
+    }));
+}
+
+function dispatchStpGpsChanged(stpIndex, gpsLat, gpsLon) {
+    gpsEventBus.dispatchEvent(new CustomEvent(STP_GPS_CHANGED, {
+        detail: { stpIndex, gpsLat, gpsLon }
+    }));
+}
+
+function syncImportedPointLinkForStp(stpIndex, stpRecord) {
+    if (!(gpsRegistry && gpsRegistry.points instanceof Map) || gpsRegistry.points.size === 0) {
+        return;
+    }
+
+    const latitude = parseGpsCoordinate(stpRecord && stpRecord.gpsLatitude, -90, 90);
+    const longitude = parseGpsCoordinate(stpRecord && stpRecord.gpsLongitude, -180, 180);
+
+    let matchedPointId = "";
+
+    if (latitude != null && longitude != null) {
+        for (const point of gpsRegistry.points.values()) {
+            const pointLatitude = parseGpsCoordinate(point && point.lat, -90, 90);
+            const pointLongitude = parseGpsCoordinate(point && point.lon, -180, 180);
+
+            if (pointLatitude == null || pointLongitude == null) {
+                continue;
+            }
+
+            if (coordinatesMatchWithinTolerance(latitude, longitude, pointLatitude, pointLongitude)) {
+                matchedPointId = normalizeTextValue(point.id);
+                break;
+            }
+        }
+    }
+
+    for (const point of gpsRegistry.points.values()) {
+        const pointId = normalizeTextValue(point && point.id);
+        if (!pointId) {
+            continue;
+        }
+
+        if (Number(point.stpIndex) === Number(stpIndex) && pointId !== matchedPointId) {
+            dispatchGpsPointUnmarked(pointId);
+        }
+    }
+
+    if (matchedPointId) {
+        dispatchGpsPointMarked(matchedPointId, stpIndex);
+    }
+
+    dispatchStpGpsChanged(stpIndex, latitude, longitude);
+}
+
 function normalizePhotoEntry(entry) {
     return {
         id: entry && entry.id ? String(entry.id) : "",
@@ -5183,6 +5923,11 @@ async function saveCurrentStp() {
             state.stps.push(currentStp);
         }
 
+        const savedStpIndex = isEditing && editingIndex < state.stps.length
+            ? editingIndex
+            : (state.stps.length - 1);
+        syncImportedPointLinkForStp(savedStpIndex, currentStp);
+
         const fullSessionSaved = saveSession();
         if (!fullSessionSaved) {
             const saveWarning = getDataSafetyAlertMessage(isEditing ? "STP update saved." : "STP saved.");
@@ -5211,6 +5956,11 @@ async function saveCurrentStp() {
         } else {
             state.stps.push(fallbackStp);
         }
+
+        const savedFallbackStpIndex = isEditing && editingIndex < state.stps.length
+            ? editingIndex
+            : (state.stps.length - 1);
+        syncImportedPointLinkForStp(savedFallbackStpIndex, fallbackStp);
 
         const fullSessionSaved = saveSession();
 
@@ -6546,6 +7296,218 @@ function handleImportCsvFile() {
     });
 
     reader.readAsText(file);
+}
+
+// ============================================
+// GPS POINTS IMPORT FUNCTIONS
+// ============================================
+
+function requestImportGpsPointsFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".csv,.geojson,.json";
+    input.addEventListener("change", function () {
+        const file = input.files[0];
+        if (file) {
+            handleImportGpsPointsFile(file);
+        }
+    });
+    input.click();
+}
+
+async function handleImportGpsPointsFile(file) {
+    try {
+        let points = [];
+        
+        if (file.name.endsWith(".geojson") || file.name.endsWith(".json")) {
+            points = await parseGeoJsonFile(file);
+        } else if (file.name.endsWith(".csv")) {
+            points = await parseGpsPointsFromCsv(file);
+        } else {
+            throw new Error("Unsupported file format. Use CSV or GeoJSON.");
+        }
+
+        if (!points || points.length === 0) {
+            alert("No GPS points found in file.");
+            return;
+        }
+
+        const source = file.name;
+        let importCount = 0;
+
+        for (const point of points) {
+            point.source = source;
+            point.status = "unmarked";
+            point.stpIndex = -1;
+            point.importedAt = new Date().toISOString();
+            
+            try {
+                await saveGpsPointToDatabase(point);
+                importCount++;
+            } catch (error) {
+                console.warn("Could not save GPS point:", point, error);
+            }
+        }
+
+        alert(`Imported ${importCount} GPS points from ${source}`);
+        updateGpsMapButtonState();
+        
+        // Trigger map refresh if map window is open
+        broadcastGpsPointsUpdated();
+    } catch (error) {
+        console.error("Error importing GPS points:", error);
+        alert(`Could not import GPS points: ${error.message}`);
+    }
+}
+
+async function parseGpsPointsFromCsv(file) {
+    const text = await file.text();
+    const rows = parseCsvTextRows(text);
+    
+    if (rows.length < 2) {
+        throw new Error("CSV file is empty or invalid.");
+    }
+
+    const points = [];
+    const headers = rows[0].map(h => normalizeTextValue(h).toLowerCase());
+    
+    // Expected columns: latitude, longitude, label, type (optional: base|supplemental|unit-id)
+    const latIndex = headers.findIndex(h => h.includes("lat"));
+    const lonIndex = headers.findIndex(h => h.includes("lon"));
+    const labelIndex = headers.findIndex(h => h.includes("label") || h.includes("name"));
+    const typeIndex = headers.findIndex(h => h.includes("type"));
+
+    if (latIndex === -1 || lonIndex === -1) {
+        throw new Error("CSV must contain 'latitude' and 'longitude' columns.");
+    }
+
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const lat = parseFloat(row[latIndex]);
+        const lon = parseFloat(row[lonIndex]);
+        const label = labelIndex >= 0 ? row[labelIndex].trim() : `Point ${i}`;
+        const type = typeIndex >= 0 ? row[typeIndex].trim() : "base";
+
+        if (!isNaN(lat) && !isNaN(lon)) {
+            points.push({
+                id: generateUniqueId(),
+                lat: Number(lat.toFixed(gpsCoordinateDecimalPlaces)),
+                lon: Number(lon.toFixed(gpsCoordinateDecimalPlaces)),
+                label: String(label),
+                type: validEntryTypes.includes(type) ? type : "base",
+                status: "unmarked",
+                stpIndex: -1
+            });
+        }
+    }
+
+    return points;
+}
+
+async function parseGeoJsonFile(file) {
+    const text = await file.text();
+    const geoJson = JSON.parse(text);
+    const points = [];
+
+    if (geoJson.type === "FeatureCollection" && Array.isArray(geoJson.features)) {
+        geoJson.features.forEach((feature, index) => {
+            const coords = feature.geometry?.coordinates;
+            if (coords && coords.length >= 2) {
+                const props = feature.properties || {};
+                points.push({
+                    id: generateUniqueId(),
+                    lat: Number(coords[1].toFixed(gpsCoordinateDecimalPlaces)),
+                    lon: Number(coords[0].toFixed(gpsCoordinateDecimalPlaces)),
+                    label: String(props.name || props.label || `Point ${index + 1}`),
+                    type: validEntryTypes.includes(props.type) ? props.type : "base",
+                    status: "unmarked",
+                    stpIndex: -1,
+                    metadata: props
+                });
+            }
+        });
+    } else if (geoJson.type === "Feature") {
+        const coords = geoJson.geometry?.coordinates;
+        if (coords && coords.length >= 2) {
+            const props = geoJson.properties || {};
+            points.push({
+                id: generateUniqueId(),
+                lat: Number(coords[1].toFixed(gpsCoordinateDecimalPlaces)),
+                lon: Number(coords[0].toFixed(gpsCoordinateDecimalPlaces)),
+                label: String(props.name || props.label || "Point 1"),
+                type: validEntryTypes.includes(props.type) ? props.type : "base",
+                status: "unmarked",
+                stpIndex: -1,
+                metadata: props
+            });
+        }
+    }
+
+    return points;
+}
+
+// Broadcast GPS points update to map iframe if open
+function broadcastGpsPointsUpdated() {
+    if (activeMapViewerObjectUrl) {
+        try {
+            const event = new CustomEvent("gps-points-updated", {
+                detail: { timestamp: Date.now() }
+            });
+            window.dispatchEvent(event);
+        } catch (error) {
+            console.warn("Could not broadcast GPS points update:", error);
+        }
+    }
+}
+
+// ============================================
+// CURRENT LOCATION TRACKING
+// ============================================
+
+function startCurrentLocationTracking() {
+    if (!("geolocation" in navigator) || currentLocationWatchId !== null) {
+        return;
+    }
+
+    try {
+        currentLocationWatchId = navigator.geolocation.watchPosition(
+            function (position) {
+                currentLocation = {
+                    lat: Number(position.coords.latitude.toFixed(gpsCoordinateDecimalPlaces)),
+                    lon: Number(position.coords.longitude.toFixed(gpsCoordinateDecimalPlaces)),
+                    accuracy: position.coords.accuracy,
+                    timestamp: position.timestamp
+                };
+
+                // Broadcast to map viewer
+                gpsEventBus.dispatchEvent(new CustomEvent("location-updated", {
+                    detail: currentLocation
+                }));
+            },
+            function (error) {
+                console.warn("Current location tracking error:", error);
+            },
+            {
+                enableHighAccuracy: false,
+                timeout: 10000,
+                maximumAge: 5000
+            }
+        );
+    } catch (error) {
+        console.warn("Could not start location tracking:", error);
+    }
+}
+
+function stopCurrentLocationTracking() {
+    if (currentLocationWatchId !== null && "geolocation" in navigator) {
+        navigator.geolocation.clearWatch(currentLocationWatchId);
+        currentLocationWatchId = null;
+        currentLocation = null;
+    }
+}
+
+function getCurrentLocation() {
+    return currentLocation ? { ...currentLocation } : null;
 }
 
 async function importSessionBackupFromText(rawText, sourceLabel) {
@@ -8197,16 +9159,99 @@ function getSavedGpsPointsForMap() {
     return gpsPoints;
 }
 
+function coordinatesMatchWithinTolerance(latitudeA, longitudeA, latitudeB, longitudeB) {
+    return Math.abs(Number(latitudeA) - Number(latitudeB)) <= gpsCoordinateMatchTolerance
+        && Math.abs(Number(longitudeA) - Number(longitudeB)) <= gpsCoordinateMatchTolerance;
+}
+
+function findSavedStpIndexByCoordinates(latitude, longitude) {
+    for (let index = 0; index < state.stps.length; index += 1) {
+        const stp = state.stps[index];
+        const stpLatitude = parseGpsCoordinate(stp && stp.gpsLatitude, -90, 90);
+        const stpLongitude = parseGpsCoordinate(stp && stp.gpsLongitude, -180, 180);
+
+        if (stpLatitude == null || stpLongitude == null) {
+            continue;
+        }
+
+        if (coordinatesMatchWithinTolerance(latitude, longitude, stpLatitude, stpLongitude)) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
+function getImportedGpsPointsForMap() {
+    if (!gpsRegistry || !(gpsRegistry.points instanceof Map) || gpsRegistry.points.size === 0) {
+        return [];
+    }
+
+    const importedPoints = [];
+
+    Array.from(gpsRegistry.points.values()).forEach(function (point, index) {
+        const latitude = parseGpsCoordinate(point && point.lat, -90, 90);
+        const longitude = parseGpsCoordinate(point && point.lon, -180, 180);
+
+        if (latitude == null || longitude == null) {
+            return;
+        }
+
+        const entryTypeKey = normalizeEntryTypeValue(point && point.type);
+        const storedStpIndex = Number.isFinite(Number(point && point.stpIndex)) ? Number(point.stpIndex) : -1;
+        const matchedStpIndex = findSavedStpIndexByCoordinates(latitude, longitude);
+        const stpIndex = matchedStpIndex >= 0 ? matchedStpIndex : storedStpIndex;
+        const statusValue = normalizeTextValue(point && point.status).toLowerCase();
+        const status = stpIndex >= 0 ? "marked" : (statusValue || "unmarked");
+        let linkedStpLabel = "";
+
+        if (stpIndex >= 0 && stpIndex < state.stps.length) {
+            const linkedStp = state.stps[stpIndex];
+            const baseLabel = normalizeTextValue(linkedStp && linkedStp.stpLabel) || ("STP " + (stpIndex + 1));
+            const supDirection = normalizeTextValue(linkedStp && linkedStp.supDirection);
+            linkedStpLabel = supDirection ? (baseLabel + supDirection) : baseLabel;
+        }
+
+        importedPoints.push({
+            id: normalizeTextValue(point && point.id) || ("imported-" + (index + 1)),
+            label: normalizeTextValue(point && point.label) || ("Imported Point " + (index + 1)),
+            entryTypeKey: entryTypeKey,
+            entryTypeLabel: getEntryTypeLabel(entryTypeKey),
+            latitude: latitude,
+            longitude: longitude,
+            source: normalizeTextValue(point && point.source),
+            status: status,
+            stpIndex: stpIndex,
+            linkedStpLabel: linkedStpLabel,
+            importedAt: normalizeTextValue(point && point.importedAt)
+        });
+    });
+
+    return importedPoints;
+}
+
 function updateGpsMapButtonState() {
     if (!elements.viewGpsMapButton) {
         return;
     }
 
-    const pointCount = getSavedGpsPointsForMap().length;
+    const savedPointCount = getSavedGpsPointsForMap().length;
+    const importedPointCount = getImportedGpsPointsForMap().length;
+    const pointCount = savedPointCount + importedPointCount;
+
     elements.viewGpsMapButton.disabled = pointCount === 0;
     elements.viewGpsMapButton.title = pointCount === 0
-        ? "Save at least one STP with valid GPS coordinates to open the map."
-        : "Open map with " + pointCount + (pointCount === 1 ? " plotted GPS point." : " plotted GPS points.");
+        ? "Import GPS points or save at least one STP with valid GPS coordinates to open the map."
+        : "Open map with "
+            + pointCount
+            + (pointCount === 1 ? " plotted GPS point" : " plotted GPS points")
+            + " ("
+            + savedPointCount
+            + " saved STP"
+            + (savedPointCount === 1 ? "" : "s")
+            + ", "
+            + importedPointCount
+            + " imported).";
 }
 
 function updateWrapUpSummary() {
@@ -8258,16 +9303,29 @@ function buildGpsMapUrl(payload) {
 
 function openGpsPointsMap() {
     const gpsPoints = getSavedGpsPointsForMap();
+    const importedGpsPoints = getImportedGpsPointsForMap();
+    const dedupedSavedGpsPoints = gpsPoints.filter(function (savedPoint) {
+        return !importedGpsPoints.some(function (importedPoint) {
+            return coordinatesMatchWithinTolerance(
+                savedPoint.latitude,
+                savedPoint.longitude,
+                importedPoint.latitude,
+                importedPoint.longitude
+            );
+        });
+    });
+    const totalPoints = dedupedSavedGpsPoints.length + importedGpsPoints.length;
 
-    if (gpsPoints.length === 0) {
-        alert("Save at least one STP with valid GPS coordinates before opening the map.");
+    if (totalPoints === 0) {
+        alert("Import GPS points or save at least one STP with valid GPS coordinates before opening the map.");
         return;
     }
 
     const pageTitle = (state.siteName || "Project") + " GPS Points Map";
     const payload = {
         title: pageTitle,
-        points: gpsPoints,
+        points: dedupedSavedGpsPoints,
+        importedPoints: importedGpsPoints,
         savedAt: new Date().toISOString()
     };
 

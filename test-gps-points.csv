@@ -1,0 +1,11 @@
+latitude,longitude,label,type
+40.748817,-73.985428,North Grid Point 1,base
+40.748650,-73.985200,North Grid Point 2,base
+40.748450,-73.985000,North Grid Point 3,supplemental
+40.748300,-73.984800,Crosshatch Reference A,unit-id
+40.747800,-73.984500,Trench Extension East,base
+40.747600,-73.984300,Feature Zone B,supplemental
+40.747400,-73.984100,Control Point North,unit-id
+40.747200,-73.983900,Detection Grid 1,base
+40.747000,-73.983700,Detection Grid 2,base
+40.746800,-73.983500,Perimeter South,supplemental

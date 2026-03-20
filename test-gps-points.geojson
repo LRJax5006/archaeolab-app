@@ -1,0 +1,52 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Survey Point Alpha",
+        "type": "base",
+        "notes": "Primary datum for grid system"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.985550, 40.748950]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Survey Point Beta",
+        "type": "base",
+        "notes": "Secondary datum"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.985300, 40.748750]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Feature Center",
+        "type": "unit-id",
+        "notes": "Central feature location"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.985000, 40.748500]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Peripheral Marker",
+        "type": "supplemental"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-73.984700, 40.748200]
+      }
+    }
+  ]
+}

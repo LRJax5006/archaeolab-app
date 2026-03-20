@@ -14,6 +14,10 @@
     <link rel="shortcut icon" href="icons/icon-192.png?v=20260319" type="image/png">
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png?v=20260319">
     <link rel="stylesheet" href="app.css">
+    <!-- Google Identity Services script for Google Sign-In -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <!-- Google Drive API client for Drive integration -->
+    <script src="https://apis.google.com/js/api.js"></script>
 </head>
 <body>
     <div id="activeStpBar" class="active-stp-bar">
@@ -24,6 +28,7 @@
             <span id="activeStpStratumCount" class="active-stp-strata"></span>
         </div>
         <div class="active-stp-bar-right">
+            <span id="stickySyncIndicator" class="sticky-sync-indicator" title="Cloud Sync Status">⭮</span>
             <span id="activeStpSaveIndicator" class="active-stp-dot" title="Session saved"></span>
             <span id="activeStpSaveText" class="active-stp-save-text" aria-live="polite">Saved</span>
             <button type="button" id="topSaveStpButton" class="active-stp-btn">Save STP</button>
@@ -75,12 +80,24 @@
                     <img class="title-logo-mark" src="Archaeolab_logo.jpg" alt="" aria-hidden="true">
                     <h1>Crew Chief</h1>
                 </div>
+                <div class="sync-status-card" id="syncStatusCard">
+                    <p class="sync-status-label">Cloud Sync</p>
+                    <div id="syncStatusBar" class="sync-status-bar" aria-live="polite">
+                        <span id="syncStatusText">Not connected</span>
+                        <span id="syncStatusIndicator" class="sync-status-indicator red"></span>
+                    </div>
+                    <div class="sync-status-actions">
+                        <button type="button" id="viewBackupsButton" class="ghost-button sync-action-btn">View Backups</button>
+                        <button type="button" id="syncSettingsButton" class="ghost-button sync-action-btn">Settings</button>
+                        <button type="button" id="manualSyncButton" class="ghost-button sync-action-btn">Sync Now</button>
+                    </div>
+                    <p id="lastSyncTime" class="sync-last-time"></p>
+                </div>
                 <p class="intro">
                     Record site information once, then enter as many shovel test pits and strata as you need.
                     STP labels remain editable, even when a label suggestion is offered.
                 </p>
             </div>
-
             <div class="hero-card">
                 <p class="hero-card-label">Current Session</p>
                 <p id="sessionStatus" class="session-status">0 STPs saved</p>
@@ -357,11 +374,27 @@
                     </div>
 
                     <div class="section-actions">
-                        <button type="button" id="exportXlsxButton" class="secondary-button">Download Excel-ready XLSX</button>
-                        <button type="button" id="exportCsvButton" class="ghost-button">Download Final CSV (End of Session)</button>
-                        <button type="button" id="importCsvButton" class="ghost-button">Import CSV Backup</button>
-                        <button type="button" id="exportJsonButton" class="ghost-button">Download JSON Backup + Photos</button>
-                        <button type="button" id="importJsonButton" class="ghost-button">Import JSON Backup + Photos</button>
+                                                <button type="button" id="exportXlsxButton" class="secondary-button">Download Excel-ready XLSX</button>
+                                                <button type="button" id="exportCsvButton" class="ghost-button">Download Final CSV (End of Session)</button>
+                                                <button type="button" id="importCsvButton" class="ghost-button">Import CSV Backup</button>
+                                                <button type="button" id="importGpsPointsButton" class="ghost-button">Import GPS Points (CSV/GeoJSON)</button>
+                                                <button type="button" id="importShpButton" class="ghost-button">Import Parcel Boundary (.shp)</button>
+                                                <button type="button" id="importGeojsonButton" class="ghost-button">Import Parcel GeoJSON</button>
+                                                <span id="shpGridControls" style="display:none; margin-left:10px;">
+                                                    <label style="margin-right:6px;">Setback (ft): <input type="number" id="setbackInput" value="10" min="0" step="1" style="width:60px;"></label>
+                                                    <label style="margin-right:6px;">Grid Spacing (ft): <input type="number" id="spacingInput" value="50" min="1" step="1" style="width:60px;"></label>
+                                                    <label style="margin-right:6px;">Start Corner:
+                                                        <select id="startCornerInput" style="width:170px;"></select>
+                                                    </label>
+                                                    <label style="margin-right:6px;">End Corner:
+                                                        <select id="endCornerInput" style="width:170px;"></select>
+                                                    </label>
+                                                    <button type="button" id="generateGridButton" class="secondary-button">Generate STP Grid</button>
+                                                    <button type="button" id="clearGridButton" class="ghost-button" style="margin-left:8px;">Clear All Grid Points</button>
+                                                    <button type="button" id="clearAllStpButton" class="ghost-button" style="margin-left:8px;">Clear All STPs</button>
+                                                </span>
+                                                <button type="button" id="exportJsonButton" class="ghost-button">Download JSON Backup + Photos</button>
+                                                <button type="button" id="importJsonButton" class="ghost-button">Import JSON Backup + Photos</button>
                     </div>
                 </div>
                 <div class="backup-destination-row">
@@ -401,6 +434,8 @@
                 <p id="savedStpFilterSummary" class="filter-summary" aria-live="polite"></p>
                 <input type="file" id="importCsvInput" accept=".csv,text/csv" hidden>
                 <input type="file" id="importJsonInput" accept=".json,application/json,text/plain" hidden>
+                <input type="file" id="importShpInput" accept=".zip,.shp,.dbf,.shx,.cpg,.prj,application/octet-stream" multiple hidden>
+                <input type="file" id="importGeojsonInput" accept=".geojson,application/geo+json,application/json,.json" hidden>
 
                 <div id="savedEmptyState" class="empty-state">No STPs saved yet.</div>
                 <div id="savedStpList" class="saved-stp-list"></div>
@@ -422,6 +457,10 @@
             </section>
         </main>
     </div>
+
+    <!-- Geospatial libraries for SHP import and grid generation -->
+    <script src="vendor/shp.min.js"></script>
+    <script src="vendor/turf.min.js"></script>
 
     <template id="stratumTemplate">
         <article class="stratum-card">
@@ -522,6 +561,6 @@
     <input type="file" id="savedPhotoOpenInput" accept="image/*" class="camera-photo-input" aria-hidden="true" tabindex="-1">
 
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <script src="app.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

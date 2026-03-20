@@ -90,6 +90,192 @@ h1 {
 }
 
 .hero-title-panel > * {
+    }
+
+    .sync-status-card {
+        position: absolute;
+        top: 50%;
+        right: 18px;
+        transform: translateY(-50%);
+        min-width: 170px;
+        max-width: 220px;
+        height: 70%;
+        min-height: 240px;
+        background: linear-gradient(160deg, #b97a0a 0%, #a05a00 100%);
+        border-radius: 22px;
+        box-shadow: var(--shadow);
+        border: 2px solid var(--line);
+        z-index: 3;
+        padding: 24px 18px 20px 16px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: flex-start;
+        gap: 14px;
+        font-size: 1.08rem;
+        color: #fff;
+        opacity: 0.98;
+        pointer-events: auto;
+    }
+    .sync-status-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 2px;
+        margin-bottom: 2px;
+    }
+    .sync-action-btn {
+        font-size: 0.93em;
+        padding: 2px 10px;
+        border-radius: 7px;
+        background: #fff6df;
+        color: var(--accent-dark);
+        border: 1.2px solid var(--accent-dark);
+        font-weight: 600;
+        box-shadow: 0 1px 0 var(--gold-dark);
+        transition: background 0.13s, color 0.13s;
+    }
+    .sync-action-btn:hover {
+        background: var(--gold);
+        color: #fff;
+    }
+    }
+    .sync-status-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        position: relative;
+    }
+    #syncStatusText {
+        color: var(--ink);
+        font-size: 1.18em;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+    }
+    /* Cloud Sync card actions: stacked, centered, matching */
+    .sync-status-card {
+        min-height: 340px;
+        /* increase card height for more space */
+    }
+    .sync-status-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        margin-top: 22px;
+        width: 100%;
+    }
+    /* Slightly smaller font for Cloud Sync card buttons */
+    .sync-action-btn {
+        width: 80%;
+        max-width: 260px;
+        background: #fff8e1;
+        color: #b36a00;
+        border: 1.5px solid #ffb300;
+        border-radius: 7px;
+        font-weight: 600;
+        font-size: 0.97em;
+        padding: 6px 0;
+        margin: 0 auto;
+        box-shadow: 0 1px 4px 0 #ffecb3;
+        transition: background 0.15s, color 0.15s, border 0.15s;
+        cursor: pointer;
+        display: block;
+        text-align: center;
+        letter-spacing: 0.01em;
+    }
+    .sync-action-btn:hover, .sync-action-btn:focus {
+        background: #ffe082;
+        color: #a65c00;
+        border-color: #ffa000;
+    }
+    .sync-status-indicator.yellow {
+        background: #ffd600;
+        box-shadow:
+            0 0 0 2.5px #fff,
+            0 0 0 5px #ffd60040,
+            0 1.5px 4px 0 #ffd60044;
+        border: 1.5px solid #ffd600;
+    }
+    .sync-status-indicator.red {
+        background: #e94335;
+        box-shadow:
+            0 0 0 2.5px #fff,
+            0 0 0 5px #e9433540,
+            0 1.5px 4px 0 #e9433544;
+        border: 1.5px solid #e94335;
+    }
+    .sync-status-actions {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 14px;
+        margin-top: 22px;
+        width: 100%;
+    }
+    .sync-action-btn {
+        width: 80%;
+        max-width: 260px;
+        background: #fff8e1;
+        color: #b36a00;
+        border: 1.5px solid #ffb300;
+        border-radius: 7px;
+        font-weight: 600;
+        font-size: 1.08em;
+        padding: 10px 0;
+        margin: 0 auto;
+        box-shadow: 0 1px 4px 0 #ffecb3;
+        transition: background 0.15s, color 0.15s, border 0.15s;
+        cursor: pointer;
+        display: block;
+        text-align: center;
+        letter-spacing: 0.01em;
+    }
+    .sync-action-btn:hover, .sync-action-btn:focus {
+        background: #ffe082;
+        color: #a65c00;
+        border-color: #ffa000;
+    }
+    /* Ensure View Backups text stays on one line and shrinks if needed */
+    #viewBackupsButton {
+        white-space: nowrap;
+        font-size: 0.98em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .sync-status-label {
+        font-size: 0.92em;
+        font-weight: 700;
+        color: var(--accent);
+        margin-bottom: 2px;
+        letter-spacing: 0.04em;
+    }
+    .sync-status-bar {
+        font-size: 0.93em;
+        font-weight: 600;
+        margin-bottom: 2px;
+    }
+    .sync-manual-btn {
+        margin-top: 2px;
+        font-size: 0.98em;
+        font-weight: 500;
+        color: var(--accent-dark);
+        border: 1.5px solid var(--accent-dark);
+        background: #fff6df;
+        border-radius: 8px;
+        padding: 3px 12px;
+        box-shadow: 0 1.5px 0 var(--gold-dark);
+        transition: background 0.13s, color 0.13s;
+    }
+    .sync-manual-btn:hover {
+        background: var(--gold);
+        color: #fff;
+    }
+    .sync-last-time {
+        font-size: 0.85em;
+        color: var(--ink-soft);
+        margin-top: 2px;
+        opacity: 0.7;
+    }
     position: relative;
     z-index: 1;
 }
@@ -120,6 +306,131 @@ h1 {
     pointer-events: none;
     user-select: none;
     mix-blend-mode: screen;
+}
+
+.login-modal {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  animation: fadeIn 0.2s;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.login-modal-content {
+    background: #232323;
+    padding: 2.5em 2em 2em 2em;
+    border-radius: 14px;
+    box-shadow: 0 4px 32px rgba(0,0,0,0.22);
+    min-width: 320px;
+    max-width: 90vw;
+    text-align: center;
+    position: relative;
+    border: 3px solid #ffd600;
+    outline: 3px solid #b21e1e;
+    outline-offset: -7px;
+}
+.login-modal-signin-label {
+    margin-top: 2.5em;
+    margin-bottom: 1.1em;
+    color: #ffd600;
+    font-size: 1.3em;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-align: center;
+    z-index: 1;
+    position: relative;
+}
+.login-modal-google-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    margin-bottom: 1.2em;
+    background: #232323;
+    border-radius: 10px;
+    padding: 0.3em 0.5em 0.3em 0.5em;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.13);
+    position: relative;
+    overflow: visible;
+    min-height: 56px;
+    margin-left: 0.5em;
+}
+
+.archaeolab-logo-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    opacity: 0.18;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.archaeolab-logo-bg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: grayscale(0.2) drop-shadow(0 0 6px #ffd60088);
+}
+.login-modal-content #googleSignInDiv > div {
+    background: #fff !important;
+    border: 2.5px solid none;
+    border-radius: 9px !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.13);
+    padding: 0.2em 0.5em !important;
+    min-width: 180px;
+    min-height: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    outline: 2.5px solid none;
+    outline-offset: -4px;
+}
+.login-modal-content button {
+    margin: 0.5em 0;
+    width: 90%;
+    max-width: 220px;
+    font-size: 1em;
+    border-radius: 7px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    transition: background 0.15s, color 0.15s, border 0.15s;
+}
+.login-modal-content #loginIcloudBtn {
+  background: #fff7e0;
+  color: #b21e1e;
+  border: 2px solid #b21e1e;
+  font-weight: 500;
+}
+.login-modal-content #loginIcloudBtn:hover {
+  background: #ffe7b3;
+  color: #a11a1a;
+  border-color: #a11a1a;
+}
+.login-modal-content #logoutBtn {
+  background: #f5f5f5;
+  color: #b21e1e;
+  border: 2px solid #b21e1e;
+  font-weight: 500;
+}
+.login-modal-content #logoutBtn:hover {
+  background: #ffe7b3;
+  color: #a11a1a;
+  border-color: #a11a1a;
+}
+/* Google button container for centering */
+#googleSignInDiv {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.7em;
+  width: 100%;
 }
 
 .intro {
@@ -156,6 +467,14 @@ h1 {
 .hero-card-buttons {
     display: grid;
     gap: 10px;
+    justify-items: start;
+}
+
+.hero-card-buttons > button {
+    min-width: 246px;
+    max-width: 100%;
+    box-sizing: border-box;
+}
 }
 
 .session-storage-status {
