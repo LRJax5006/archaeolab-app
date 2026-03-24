@@ -36,8 +36,10 @@ async function ensureDriveToken() {
 
     // Initialize GIS token client if not already
     if (!gisTokenClient) {
-        gisTokenClient = window.google.accounts.oauth2.initTokenClient({
-            client_id: '997968832263-poefj2fhisqnptlpq9s47g7qmjct6njd.apps.googleusercontent.com',
+            // Load client_id from environment or injected config
+            const clientId = (window.ENV && window.ENV.GOOGLE_CLIENT_ID) || (typeof GOOGLE_CLIENT_ID !== 'undefined' ? GOOGLE_CLIENT_ID : undefined) || 'REPLACE_ME_IN_ENV';
+            gisTokenClient = window.google.accounts.oauth2.initTokenClient({
+                client_id: clientId,
             scope: 'https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file',
             callback: (tokenResponse) => {
                 driveAccessToken = tokenResponse.access_token;
