@@ -43,10 +43,17 @@
     align-self: stretch;
 }
 @media (max-width: 600px) {
+    .hero-flex-row > .hero-title-panel,
+    .hero-flex-row > .sync-status-card,
+    .hero-flex-row > .hero-card {
+        max-width: calc(100vw - 24px);
+        min-width: 0;
+        margin-left: auto;
+        margin-right: auto;
+        box-sizing: border-box;
+    }
     .sync-status-card {
         margin-top: 20px;
-        max-width: 98vw;
-        min-width: 0;
     }
     .hero-title-panel {
         padding-bottom: 18px;
