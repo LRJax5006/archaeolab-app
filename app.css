@@ -1,3 +1,57 @@
+/* Responsive flex row for hero and sync cards */
+.hero-flex-row {
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: center;
+    gap: 36px;
+    margin-top: 0;
+    margin-bottom: 0;
+    width: 100%;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+    text-align: center;
+}
+
+.hero-flex-row > .hero-title-panel {
+    flex: 2 1 420px;
+    min-width: 320px;
+}
+.hero-flex-row > .sync-status-card {
+    flex: 1 1 260px;
+    min-width: 200px;
+    max-width: 340px;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+.hero-flex-row > .hero-card {
+    flex: 1 1 320px;
+    min-width: 220px;
+    max-width: 370px;
+    margin-top: 0;
+    margin-bottom: 0;
+    align-self: stretch;
+}
+.hero-flex-row > .hero-title-panel,
+.hero-flex-row > .sync-status-card,
+.hero-flex-row > .hero-card {
+    flex: 1 1 0;
+    min-width: 260px;
+    margin-top: 0;
+    margin-bottom: 0;
+    align-self: stretch;
+}
+@media (max-width: 600px) {
+    .sync-status-card {
+        margin-top: 20px;
+        max-width: 98vw;
+        min-width: 0;
+    }
+    .hero-title-panel {
+        padding-bottom: 18px;
+    }
+}
 :root {
     --paper: #f8f6f2;
     --paper-deep: #d2cbc1;
@@ -93,13 +147,24 @@ h1 {
     }
 
     .sync-status-card {
-        position: absolute;
-        top: 50%;
-        right: 18px;
-        transform: translateY(-50%);
+        position: static;
+        margin: 0;
+        @media (max-width: 900px) {
+            .hero-flex-row {
+                flex-direction: column;
+                gap: 18px;
+            }
+            .hero-flex-row > .hero-title-panel,
+            .hero-flex-row > .sync-status-card,
+            .hero-flex-row > .hero-card {
+                margin-top: 12px;
+                margin-left: auto;
+                margin-right: auto;
+                max-width: 98vw;
+            }
+        }
         min-width: 170px;
-        max-width: 220px;
-        height: 70%;
+        max-width: 340px;
         min-height: 240px;
         background: linear-gradient(160deg, #b97a0a 0%, #a05a00 100%);
         border-radius: 22px;
@@ -108,6 +173,8 @@ h1 {
         z-index: 3;
         padding: 24px 18px 20px 16px;
         display: flex;
+        flex-direction: column;
+        align-items: center;
         flex-direction: column;
         align-items: flex-start;
         justify-content: flex-start;
@@ -199,10 +266,15 @@ h1 {
     .sync-status-indicator.red {
         background: #e94335;
         box-shadow:
-            0 0 0 2.5px #fff,
+            0 0 0 1.5px #fff,
             0 0 0 5px #e9433540,
             0 1.5px 4px 0 #e9433544;
-        border: 1.5px solid #e94335;
+        border: 1.5px solid #5e0b03;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        display: inline-block;
+        vertical-align: middle;
     }
     .sync-status-actions {
         display: flex;
@@ -462,17 +534,21 @@ h1 {
 .hero-card {
     padding: 22px;
     align-self: start;
+    width: 100%;
 }
 
 .hero-card-buttons {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: 10px;
-    justify-items: start;
+    align-items: center;
+    width: 100%;
 }
 
 .hero-card-buttons > button {
-    min-width: 246px;
-    max-width: 100%;
+    min-width: 0;
+    width: 100%;
+    max-width: 340px;
     box-sizing: border-box;
 }
 }

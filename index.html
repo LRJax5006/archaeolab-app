@@ -20,6 +20,10 @@
     <script src="https://apis.google.com/js/api.js"></script>
 </head>
 <body>
+    <div id="loginBar" style="display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-bottom: 8px;">
+        <button id="loginUiButton" class="ghost-button">Sign in</button>
+        <span id="userUiLabel" class="user-label" style="color: #fff; font-size: 1em;">Not signed in</span>
+    </div>
     <div id="activeStpBar" class="active-stp-bar">
         <div class="active-stp-bar-left">
             <span id="activeStpSiteName" class="active-stp-site" hidden></span>
@@ -74,11 +78,17 @@
         </div>
 
         <header class="hero">
-            <div class="hero-title-panel">
-                <p class="eyebrow">by Archaeolab</p>
-                <div class="title-logo-stack" aria-label="Crew Chief by Archaeolab">
-                    <img class="title-logo-mark" src="Archaeolab_logo.jpg" alt="" aria-hidden="true">
-                    <h1>Crew Chief</h1>
+            <div class="hero-flex-row">
+                <div class="hero-title-panel">
+                    <p class="eyebrow">by Archaeolab</p>
+                    <div class="title-logo-stack" aria-label="Crew Chief by Archaeolab">
+                        <img class="title-logo-mark" src="Archaeolab_logo.jpg" alt="" aria-hidden="true">
+                        <h1>Crew Chief</h1>
+                    </div>
+                    <p class="intro">
+                        Record site information once, then enter as many shovel test pits and strata as you need.
+                        STP labels remain editable, even when a label suggestion is offered.
+                    </p>
                 </div>
                 <div class="sync-status-card" id="syncStatusCard">
                     <p class="sync-status-label">Cloud Sync</p>
@@ -93,22 +103,18 @@
                     </div>
                     <p id="lastSyncTime" class="sync-last-time"></p>
                 </div>
-                <p class="intro">
-                    Record site information once, then enter as many shovel test pits and strata as you need.
-                    STP labels remain editable, even when a label suggestion is offered.
-                </p>
-            </div>
-            <div class="hero-card">
-                <p class="hero-card-label">Current Session</p>
-                <p id="sessionStatus" class="session-status">0 STPs saved</p>
-                <div class="hero-card-buttons">
-                    <button type="button" id="saveProjectButton" class="secondary-button">Save Project &amp; Start New</button>
-                    <button type="button" id="clearSessionButton" class="ghost-button">Clear Session</button>
-                    <button type="button" id="highContrastToggle" class="ghost-button contrast-toggle" aria-pressed="false">High Contrast: Off</button>
-                    <button type="button" id="importQualityToggle" class="ghost-button contrast-toggle" aria-pressed="true">Import Quality: Sharp</button>
+                <div class="hero-card">
+                    <p class="hero-card-label">Current Session</p>
+                    <p id="sessionStatus" class="session-status">0 STPs saved</p>
+                    <div class="hero-card-buttons">
+                        <button type="button" id="saveProjectButton" class="secondary-button">Save Project &amp; Start New</button>
+                        <button type="button" id="clearSessionButton" class="ghost-button">Clear Session</button>
+                        <button type="button" id="highContrastToggle" class="ghost-button contrast-toggle" aria-pressed="false">High Contrast: Off</button>
+                        <button type="button" id="importQualityToggle" class="ghost-button contrast-toggle" aria-pressed="true">Import Quality: Sharp</button>
+                    </div>
+                    <p id="dataSafetyStatus" class="session-storage-status" aria-live="polite"></p>
+                    <p id="imageStorageStatus" class="session-storage-status" aria-live="polite"></p>
                 </div>
-                <p id="dataSafetyStatus" class="session-storage-status" aria-live="polite"></p>
-                <p id="imageStorageStatus" class="session-storage-status" aria-live="polite"></p>
             </div>
         </header>
 
@@ -134,44 +140,6 @@
 
         <main class="workspace">
             <section class="panel tester-guide-panel" data-flow-step="guide" data-flow-label="Tester Guide" data-field-mode-hide>
-                <div class="section-head">
-                    <div>
-                        <h2>Tester Quick Guide</h2>
-                        <p>Use this checklist before sending feedback.</p>
-                    </div>
-                </div>
-
-                <ol class="tester-guide-list">
-                    <li>Open the app and confirm all sections render without errors.</li>
-                    <li>Create one STP with at least two strata, then save the STP.</li>
-                    <li>Upload a map image and use View Map Full Screen to open a full reference view.</li>
-                    <li>Use Save Project and Load Project to confirm project persistence.</li>
-                    <li>Download XLSX and CSV exports and confirm both files are created.</li>
-                </ol>
-
-                <p class="tester-guide-note">
-                    Bug report format: browser and device, exact steps, expected result, actual result, and screenshot if available.
-                </p>
-            </section>
-
-            <section class="panel" data-flow-step="projects" data-flow-label="Project Library" data-field-mode-hide>
-                <div class="section-head">
-                    <div>
-                        <h2>Project Library <span id="projectsHeaderCount" class="section-count" aria-live="polite"></span></h2>
-                        <p>Save the current session as a named project, then start fresh. Load any project to resume work.</p>
-                    </div>
-                </div>
-                <div class="panel-filters panel-filters-projects">
-                    <label class="filter-field">
-                        <span>Search Projects</span>
-                        <input type="search" id="projectSearchInput" placeholder="Search by project name, site, or location" aria-label="Search projects">
-                        <p class="filter-hint">Press Esc to clear search.</p>
-                    </label>
-
-                    <label class="filter-field filter-field-compact">
-                        <span>Sort</span>
-                        <select id="projectSortSelect" aria-label="Sort projects">
-                            <option value="newest">Newest</option>
                             <option value="oldest">Oldest</option>
                             <option value="az">A-Z</option>
                         </select>
